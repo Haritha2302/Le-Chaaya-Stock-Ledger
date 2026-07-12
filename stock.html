@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Le Chaaya · Stock</title>
+<style>
+  :root {
+    --cream:#FAF5EA; --gold:#C9A24B; --gold-deep:#A8842F; --tea:#3E2C1C;
+    --leaf:#4E6B4A; --ember:#A65440; --card:#FFFFFF; --line:#E8DFCC;
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    font-family: Georgia,'Times New Roman',serif; background:var(--cream); color:var(--tea);
+    min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:20px 14px 60px;
+  }
+  .brand { text-align:center; margin-bottom:16px; }
+  .brand h1 { font-size:1.4rem; letter-spacing:0.12em; font-weight:600; }
+  .brand p { font-size:0.75rem; letter-spacing:0.22em; text-transform:uppercase; color:var(--gold-deep); margin-top:3px; }
+  .wrap { width:100%; max-width:420px; }
+  .card {
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:18px 16px; box-shadow:0 2px 10px rgba(62,44,28,0.06); margin-bottom:14px;
+  }
+  label { display:block; font-size:0.72rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--gold-deep); margin:10px 0 4px; }
+  input, select {
+    width:100%; padding:11px 12px; font-size:1rem; font-family:inherit;
+    border:1px solid var(--line); border-radius:9px; background:var(--cream); color:var(--tea);
+  }
+  input:focus, select:focus { outline:2px solid var(--gold); outline-offset:1px; }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .btn {
+    width:100%; margin-top:14px; padding:14px; font-family:inherit; font-size:1.05rem;
+    letter-spacing:0.05em; border:none; border-radius:10px; cursor:pointer;
+    background:var(--gold); color:#fff; transition:transform .06s;
+  }
+  .btn:active { transform:scale(0.98); }
+  .btn:disabled { background:var(--line); color:#9b8f7a; cursor:wait; }
+  .btn.quiet { background:var(--card); color:var(--gold-deep); border:1px solid var(--gold); }
+  .btn.small { width:auto; padding:9px 16px; font-size:0.92rem; margin-top:8px; }
+  .btn.leaf { background:var(--leaf); }
+  .msg { margin-top:12px; padding:12px; border-radius:9px; font-size:0.95rem; line-height:1.45; display:none; }
+  .msg.ok { display:block; background:#EFF4EC; border:1px solid var(--leaf); }
+  .msg.error { display:block; background:#F7ECE8; border:1px solid var(--ember); }
+
+  /* mode tabs */
+  .tabs { display:flex; gap:8px; margin-bottom:14px; }
+  .tabs button {
+    flex:1; padding:11px; font-family:inherit; font-size:0.95rem; letter-spacing:0.08em;
+    text-transform:uppercase; border:1px solid var(--gold); border-radius:10px;
+    background:var(--card); color:var(--gold-deep); cursor:pointer;
+  }
+  .tabs button.on { background:var(--gold); color:#fff; }
+
+  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:0.9rem; }
+  .topbar a { color:var(--gold-deep); }
+
+  /* item cards */
+  .item { border:1px solid var(--line); border-radius:11px; padding:12px 14px; margin-bottom:10px; background:var(--card); }
+  .item .head { display:flex; justify-content:space-between; align-items:center; cursor:pointer; }
+  .item .head strong { font-size:1.02rem; }
+  .badge { font-size:0.72rem; letter-spacing:0.06em; padding:3px 9px; border-radius:20px; border:1px solid var(--line); color:#8b7d66; }
+  .badge.done { border-color:var(--leaf); color:var(--leaf); }
+  .badge.vrf { border-color:var(--gold-deep); color:var(--gold-deep); }
+  .badge.var { border-color:var(--ember); color:var(--ember); }
+  .item .body { display:none; margin-top:10px; }
+  .item.open .body { display:block; }
+  .facts { font-size:0.88rem; color:#6f5f4b; margin-top:6px; line-height:1.5; }
+  details.purchase { margin-bottom:14px; }
+  details.purchase summary {
+    list-style:none; cursor:pointer; padding:13px; border:1px dashed var(--gold);
+    border-radius:11px; color:var(--gold-deep); text-align:center; font-size:0.95rem; letter-spacing:0.05em;
+  }
+  .hint { font-size:0.8rem; color:#8b7d66; margin-top:4px; }
+</style>
+</head>
+<body>
+  <div class="brand"><h1>LE CHAAYA</h1><p>Stock ledger</p></div>
+  <div class="wrap">
+
+    <!-- LOGIN -->
+    <div class="card" id="loginCard">
+      <label for="empId">Employee ID</label>
+      <input id="empId" autocomplete="off" placeholder="e.g. E001">
+      <label for="pin">PIN</label>
+      <input id="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="••••">
+      <button class="btn" id="loginBtn">Sign in</button>
+      <div class="msg" id="loginMsg"></div>
+    </div>
+
+    <!-- MAIN -->
+    <div id="main" style="display:none">
+      <div class="topbar">
+        <span id="hello"></span>
+        <a href="#" id="logout">Sign out</a>
+      </div>
+      <div class="tabs">
+        <button id="tabEnter" class="on">Enter</button>
+        <button id="tabReview">Review</button>
+      </div>
+
+      <!-- ENTER MODE -->
+      <div id="enterPane">
+        <button class="btn leaf" id="startDayBtn" style="display:none">Start today's stock day</button>
+
+        <details class="purchase" id="purchDetails">
+          <summary>+ Record a purchase / delivery</summary>
+          <div class="card" style="margin-top:10px">
+            <label>Item</label>
+            <select id="pItem"></select>
+            <div class="row2">
+              <div><label>Quantity</label><input id="pQty" type="number" inputmode="decimal" min="0" step="any"></div>
+              <div><label>Rate (₹ per unit)</label><input id="pRate" type="number" inputmode="decimal" min="0" step="any"></div>
+            </div>
+            <label>Supplier</label>
+            <input id="pSupplier" placeholder="Vendor name">
+            <label>Document type</label>
+            <select id="pDocType"></select>
+            <label>Doc / invoice no</label>
+            <input id="pDocNo" placeholder="Leave blank on Self Voucher to auto-number">
+            <div class="row2">
+              <div><label>Payment status</label><select id="pPayStatus"></select></div>
+              <div><label>Payment ref (UPI ID)</label><input id="pPayRef" placeholder="Txn ID"></div>
+            </div>
+            <div class="row2">
+              <div><label>Mfg date</label><input id="pMfg" type="date"></div>
+              <div><label>Expiry date</label><input id="pExp" type="date"></div>
+            </div>
+            <label>Batch no</label>
+            <input id="pBatch" placeholder="From packet, if printed">
+            <label>Bill photo link</label>
+            <input id="pPhoto" placeholder="Google Drive link (optional)">
+            <div class="hint">One entry per batch — if a delivery has multiple mfg dates, record each separately with the same doc no.</div>
+            <button class="btn" id="pSave">Save purchase</button>
+            <div class="msg" id="pMsg"></div>
+          </div>
+        </details>
+
+        <div id="entryList"></div>
+      </div>
+
+      <!-- REVIEW MODE -->
+      <div id="reviewPane" style="display:none">
+        <div class="hint" style="margin-bottom:10px">Verify each item after checking the numbers. You cannot verify items you entered yourself.</div>
+        <div id="reviewList"></div>
+      </div>
+
+      <div class="msg" id="mainMsg"></div>
+    </div>
+  </div>
+
+<script>
+  // ── CONFIG: paste your Stock Ledger Apps Script /exec URL here ──
+  const SCRIPT_URL = 'PASTE_YOUR_STOCK_APPS_SCRIPT_EXEC_URL_HERE';
+
+  let cred = { empId:'', pin:'' };
+  let boot = null;       // items + dropdown lists
+  let rows = [];         // today's rows
+
+  const $ = id => document.getElementById(id);
+
+  async function api(payload) {
+    const res = await fetch(SCRIPT_URL, {
+      method:'POST',
+      headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({ empId:cred.empId, pin:cred.pin }, payload)),
+      redirect:'follow'
+    });
+    return res.json();
+  }
+
+  function msg(el, kind, text) { el.className = 'msg ' + kind; el.textContent = text;
+    if (kind === 'ok') setTimeout(() => { el.className = 'msg'; }, 3500); }
+
+  // ── LOGIN ──
+  $('loginBtn').addEventListener('click', async () => {
+    cred = { empId: $('empId').value.trim().toUpperCase(), pin: $('pin').value };
+    if (!cred.empId || !cred.pin) { msg($('loginMsg'),'error','Enter your ID and PIN.'); return; }
+    $('loginBtn').disabled = true;
+    try {
+      const r = await api({ action:'login' });
+      if (!r.ok) { msg($('loginMsg'),'error', r.error); $('loginBtn').disabled = false; return; }
+      try { localStorage.setItem('lc_stock_emp', cred.empId); } catch(e){}
+      $('hello').textContent = 'Hi, ' + r.name;
+      $('loginCard').style.display = 'none';
+      $('main').style.display = 'block';
+      await loadAll();
+    } catch(e) { msg($('loginMsg'),'error','Could not reach the server.'); }
+    $('loginBtn').disabled = false;
+  });
+
+  $('logout').addEventListener('click', e => { e.preventDefault(); location.reload(); });
+
+  async function loadAll() {
+    const b = await api({ action:'bootstrap' });
+    if (!b.ok) { msg($('mainMsg'),'error', b.error); return; }
+    boot = b;
+    fillSelect($('pItem'), b.items.map(i => ({ v:i.sku, t:i.name + ' (' + i.unit + ')' })));
+    fillSelect($('pDocType'), b.docTypes.map(v => ({ v:v, t:v })));
+    fillSelect($('pPayStatus'), b.paymentStatus.map(v => ({ v:v, t:v })));
+    const t = await api({ action:'today' });
+    rows = t.ok ? t.rows : [];
+    render();
+  }
+
+  function fillSelect(sel, opts) {
+    sel.innerHTML = opts.map(o => '<option value="' + o.v + '">' + o.t + '</option>').join('');
+  }
+
+  // ── RENDER ──
+  function render() {
+    $('startDayBtn').style.display = rows.length === 0 ? 'block' : 'none';
+    renderEntry(); renderReview();
+  }
+
+  function fmt(v) { return (v === '' || v == null) ? '—' : v; }
+
+  function renderEntry() {
+    $('entryList').innerHTML = rows.map(r => {
+      const done = r.countedBy !== '';
+      return '<div class="item" data-sku="' + r.sku + '">' +
+        '<div class="head" onclick="toggle(this)"><strong>' + r.item + '</strong>' +
+        '<span class="badge ' + (done ? 'done' : '') + '">' + (done ? 'Entered' : 'Pending') + '</span></div>' +
+        '<div class="body">' +
+        '<div class="facts">Opening (carried): <b>' + fmt(r.opening) + ' ' + r.unit + '</b> · Purchased today: <b>' + fmt(r.purchased) + '</b></div>' +
+        '<div class="row2">' +
+          '<div><label>Opening count (optional)</label><input type="number" step="any" min="0" class="f-openingCount" value="' + (r.openingCount ?? '') + '"></div>' +
+          '<div><label>Billed</label><input type="number" step="any" min="0" class="f-billed" value="' + (r.billed ?? '') + '"></div>' +
+        '</div>' +
+        '<div class="row2">' +
+          '<div><label>Wastage</label><input type="number" step="any" min="0" class="f-wastage" value="' + (r.wastage ?? '') + '"></div>' +
+          '<div><label>Reason</label><select class="f-wastageReason">' +
+            '<option value=""></option>' +
+            boot.wastageReasons.map(w => '<option' + (r.wastageReason === w ? ' selected' : '') + '>' + w + '</option>').join('') +
+          '</select></div>' +
+        '</div>' +
+        '<div class="row2">' +
+          '<div><label>Staff excess</label><input type="number" step="any" min="0" class="f-staffExcess" value="' + (r.staffExcess ?? '') + '"></div>' +
+          '<div><label>Comp/Sampling</label><input type="number" step="any" min="0" class="f-comp" value="' + (r.comp ?? '') + '"></div>' +
+        '</div>' +
+        '<label>Physical closing count</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '">' +
+        '<label>Remarks</label><input class="f-remarks" value="' + (r.remarks || '') + '">' +
+        '<button class="btn small" onclick="saveEntry(\'' + r.sku + '\', this)">Save ' + r.item + '</button>' +
+        '</div></div>';
+    }).join('') || '<div class="hint">No items yet — start the day above.</div>';
+  }
+
+  function renderReview() {
+    $('reviewList').innerHTML = rows.map(r => {
+      const counted = r.countedBy !== '';
+      const verified = r.verifiedBy !== '';
+      const hasVar = r.variance !== '' && r.variance != null && Number(r.variance) !== 0;
+      let badge = verified ? '<span class="badge vrf">Verified</span>'
+                : counted ? '<span class="badge done">Awaiting review</span>'
+                : '<span class="badge">Not entered</span>';
+      if (hasVar) badge += ' <span class="badge var">Var: ' + r.variance + '</span>';
+      return '<div class="item open">' +
+        '<div class="head"><strong>' + r.item + '</strong><span>' + badge + '</span></div>' +
+        '<div class="body" style="display:block">' +
+        '<div class="facts">' +
+          'Opening ' + fmt(r.opening) + (r.openingCount !== '' && r.openingCount != null ? ' (counted ' + r.openingCount + ', overnight var ' + fmt(r.overnightVar) + ')' : '') +
+          ' · Purchased ' + fmt(r.purchased) +
+          ' · Billed ' + fmt(r.billed) +
+          ' · Wastage ' + fmt(r.wastage) + (r.wastageReason ? ' (' + r.wastageReason + ')' : '') +
+          ' · Staff excess ' + fmt(r.staffExcess) +
+          ' · Comp ' + fmt(r.comp) +
+          '<br>Expected <b>' + fmt(r.expected) + '</b> · Counted <b>' + fmt(r.physical) + '</b> · Variance <b>' + fmt(r.variance) + '</b>' +
+          (r.remarks ? '<br>Remarks: ' + r.remarks : '') +
+          (counted ? '<br>Entered by ' + r.countedBy : '') +
+          (verified ? ' · Verified by ' + r.verifiedBy : '') +
+        '</div>' +
+        (counted && !verified ? '<button class="btn small leaf" onclick="verify(\'' + r.sku + '\', this)">Verify</button>' : '') +
+        '</div></div>';
+    }).join('') || '<div class="hint">Nothing to review yet.</div>';
+  }
+
+  window.toggle = el => el.parentElement.classList.toggle('open');
+
+  // ── ACTIONS ──
+  $('startDayBtn').addEventListener('click', async () => {
+    $('startDayBtn').disabled = true;
+    const r = await api({ action:'startDay' });
+    if (r.ok) { rows = r.rows; render(); msg($('mainMsg'),'ok','Day started — ' + r.added + ' items ready.'); }
+    else msg($('mainMsg'),'error', r.error);
+    $('startDayBtn').disabled = false;
+  });
+
+  window.saveEntry = async (sku, btn) => {
+    const card = btn.closest('.item');
+    const g = cls => card.querySelector('.' + cls).value;
+    btn.disabled = true;
+    const r = await api({
+      action:'saveEntry', sku:sku,
+      openingCount:g('f-openingCount'), billed:g('f-billed'),
+      wastage:g('f-wastage'), wastageReason:g('f-wastageReason'),
+      staffExcess:g('f-staffExcess'), comp:g('f-comp'),
+      physicalClosing:g('f-physicalClosing'), remarks:g('f-remarks')
+    });
+    if (r.ok) { rows = r.rows; render(); msg($('mainMsg'),'ok','Saved.'); }
+    else { msg($('mainMsg'),'error', r.error); btn.disabled = false; }
+  };
+
+  window.verify = async (sku, btn) => {
+    btn.disabled = true;
+    const r = await api({ action:'verify', sku:sku });
+    if (r.ok) { rows = r.rows; render(); msg($('mainMsg'),'ok','Verified.'); }
+    else { msg($('mainMsg'),'error', r.error); btn.disabled = false; }
+  };
+
+  $('pSave').addEventListener('click', async () => {
+    $('pSave').disabled = true;
+    const r = await api({
+      action:'addPurchase',
+      sku:$('pItem').value, qty:$('pQty').value, rate:$('pRate').value,
+      supplier:$('pSupplier').value, batchNo:$('pBatch').value,
+      mfgDate:$('pMfg').value, expiryDate:$('pExp').value,
+      docType:$('pDocType').value, docNo:$('pDocNo').value,
+      paymentStatus:$('pPayStatus').value, paymentRef:$('pPayRef').value,
+      billPhoto:$('pPhoto').value
+    });
+    if (r.ok) {
+      msg($('pMsg'),'ok','Recorded: ' + r.qty + ' × ' + r.item + ' · Doc no: ' + r.docNo);
+      ['pQty','pRate','pSupplier','pBatch','pMfg','pExp','pDocNo','pPayRef','pPhoto'].forEach(id => $(id).value = '');
+      const t = await api({ action:'today' }); if (t.ok) { rows = t.rows; render(); }
+    } else msg($('pMsg'),'error', r.error);
+    $('pSave').disabled = false;
+  });
+
+  // ── TABS ──
+  $('tabEnter').addEventListener('click', () => setTab('enter'));
+  $('tabReview').addEventListener('click', () => setTab('review'));
+  function setTab(t) {
+    $('tabEnter').className = t === 'enter' ? 'on' : '';
+    $('tabReview').className = t === 'review' ? 'on' : '';
+    $('enterPane').style.display = t === 'enter' ? 'block' : 'none';
+    $('reviewPane').style.display = t === 'review' ? 'block' : 'none';
+  }
+
+  // prefill last employee id
+  try { const last = localStorage.getItem('lc_stock_emp'); if (last) $('empId').value = last; } catch(e){}
+</script>
+</body>
+</html>
