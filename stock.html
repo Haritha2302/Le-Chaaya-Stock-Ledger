@@ -27,6 +27,7 @@
     width:100%; padding:11px 12px; font-size:1rem; font-family:inherit;
     border:1px solid var(--line); border-radius:9px; background:var(--cream); color:var(--tea);
   }
+  input:disabled { background:#F1EBDD; color:#9b8f7a; }
   input:focus, select:focus { outline:2px solid var(--gold); outline-offset:1px; }
   .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .btn {
@@ -191,12 +192,22 @@
 
   $('logout').addEventListener('click', e => { e.preventDefault(); location.reload(); });
 
+  function syncDocNo() {
+    const isVoucher = $('pDocType').value === 'Self Voucher';
+    const d = $('pDocNo');
+    d.disabled = isVoucher;
+    if (isVoucher) d.value = '';
+    d.placeholder = isVoucher ? 'Auto-numbered — no entry needed' : 'Vendor invoice number';
+  }
+  $('pDocType').addEventListener('change', syncDocNo);
+
   async function loadAll() {
     const b = await api({ action:'bootstrap' });
     if (!b.ok) { msg($('mainMsg'),'error', b.error); return; }
     boot = b;
     fillSelect($('pItem'), b.items.map(i => ({ v:i.sku, t:i.name + ' (' + i.unit + ')' })));
     fillSelect($('pDocType'), b.docTypes.map(v => ({ v:v, t:v })));
+    syncDocNo();
     fillSelect($('pPayStatus'), b.paymentStatus.map(v => ({ v:v, t:v })));
     const t = await api({ action:'today' });
     rows = t.ok ? t.rows : [];
