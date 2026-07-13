@@ -116,6 +116,8 @@
             </div>
             <label>Supplier</label>
             <input id="pSupplier" placeholder="Vendor name">
+            <label>Delivered to</label>
+            <select id="pLocation"><option>Cafe</option><option>Storage</option></select>
             <label>Document type</label>
             <select id="pDocType"></select>
             <label>Doc / invoice no</label>
@@ -325,6 +327,7 @@
       action:'addPurchase',
       sku:$('pItem').value, qty:$('pQty').value, rate:$('pRate').value,
       supplier:$('pSupplier').value, batchNo:$('pBatch').value,
+      location:$('pLocation').value,
       mfgDate:$('pMfg').value, expiryDate:$('pExp').value,
       docType:$('pDocType').value, docNo:$('pDocNo').value,
       paymentStatus:$('pPayStatus').value, paymentRef:$('pPayRef').value,
