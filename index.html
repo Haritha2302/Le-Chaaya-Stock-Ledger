@@ -69,7 +69,7 @@
   .item.open .body { display:block; }
   .facts { font-size:0.88rem; color:#6f5f4b; margin-top:6px; line-height:1.5; }
   details.purchase { margin-bottom:14px; }
-  details.purchase summary {
+  details.purchase > summary {
     list-style:none; cursor:pointer; padding:13px; border:1px dashed var(--gold);
     border-radius:11px; color:var(--gold-deep); text-align:center; font-size:0.95rem; letter-spacing:0.05em;
   }
@@ -85,7 +85,27 @@ input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 
-  .section-h { font-size:0.78rem; letter-spacing:0.18em; text-transform:uppercase; color:var(--gold-deep); margin:16px 4px 8px; }
+.item .btn.small { display: block; margin-top: 14px; }
+
+select {
+  -webkit-appearance: none; appearance: none;
+  min-height: 47px;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23A8842F' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+}
+
+details.sect > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; padding: 12px 4px; border-bottom: 2px solid var(--gold); margin: 14px 0 10px; }
+details.sect > summary::-webkit-details-marker { display: none; }
+.section-h { font-size: 1.05rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--tea); font-weight: 600; }
+.sect-count { font-size: 0.78rem; letter-spacing: 0.05em; color: var(--gold-deep); border: 1px solid var(--gold); border-radius: 20px; padding: 3px 10px; }
+
+details.batch > summary { list-style: none; cursor: pointer; font-size: 0.85rem; color: var(--gold-deep); text-decoration: underline; padding: 4px 0; }
+details.batch > summary::-webkit-details-marker { display: none; }
+
+#pPhotoBtn { display: block; }
+  
 </style>
 </head>
 <body>
@@ -139,7 +159,7 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
               <div><label>Payment ref (UPI ID)</label><input id="pPayRef" placeholder="Txn ID"></div>
             </div>
 
-            <details><summary class="morelink" style="text-decoration:none">+ Batch details — mfg/expiry, batch no, bill photo</summary>
+            <details class="batch"><summary>+ Batch details - mfg/expiry, batch no, bill photo</summary>
               <div class="row2">
                 <div><label>Mfg date</label><input id="pMfg" type="date"></div>
                 <div><label>Expiry date</label><input id="pExp" type="date"></div>
@@ -147,7 +167,9 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
               <label>Batch no</label>
               <input id="pBatch" placeholder="From packet, if printed">
               <label>Bill photo</label>
-              <input id="pPhotoFile" type="file" accept="image/*" capture="environment">
+              <button type="button" class="btn quiet small" id="pPhotoBtn">Take a photo of the bill</button>
+              <span class="hint" id="pPhotoName"></span>
+              <input id="pPhotoFile" type="file" accept="image/*" capture="environment" style="display:none">
               <div class="hint">One entry per batch — if a delivery has multiple mfg dates, record each separately with the same doc no.</div>
             </details>
               
@@ -261,7 +283,11 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
     $('entryList').innerHTML = order.map(cat => {
       const group = rows.filter(r => (catBySku[r.sku] || 'Other') === cat);
       if (!group.length) return '';
-      return '<div class="section-h">' + cat + '</div>' + group.map(r => {
+      const pending = group.filter(r => r.countedBy === '').length;
+      return '<details class="sect"' + (cat === 'F&B' ? ' open' : '') + '>' +
+        '<summary class="section-h">' + cat +
+        '<span class="sect-count">' + (pending ? pending + ' pending' : 'all entered ✓') + '</span></summary>' +
+        group.map(r => {
         const done = r.countedBy !== '';
         return '<div class="item" data-sku="' + r.sku + '">' +
           '<div class="head" onclick="toggle(this)"><strong>' + r.item + '</strong>' +
@@ -289,7 +315,7 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
           '</div>' +
           '<button class="btn small" onclick="saveEntry(\'' + r.sku + '\', this)">Save ' + r.item + '</button>' +
           '</div></div>';
-        }).join('');
+        }).join('') + '</details>';
     }).join('') || '<div class="hint">No items yet — start the day above.</div>';
   }
 
@@ -355,8 +381,10 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
     else { msg($('mainMsg'),'error', r.error); btn.disabled = false; }
   };
 
+  $('pPhotoBtn').addEventListener('click', () => $('pPhotoFile').click());
   $('pPhotoFile').addEventListener('change', async e => {
     photoB64 = e.target.files[0] ? await shrink(e.target.files[0]) : '';
+    $('pPhotoName').textContent = photoB64 ? '✓ Photo attached' : '';
   });
 
   $('pSave').addEventListener('click', async () => {
@@ -374,7 +402,7 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
     if (r.ok) {
       msg($('pMsg'),'ok','Recorded: ' + r.qty + ' × ' + r.item + ' · Doc no: ' + r.docNo);
       ['pQty','pRate','pSupplier','pBatch','pMfg','pExp','pDocNo','pPayRef'].forEach(id => $(id).value = '');
-      photoB64 = ''; $('pPhotoFile').value = '';
+      photoB64 = ''; $('pPhotoFile').value = ''; $('pPhotoName').textContent = '';
       const t = await api({ action:'today' }); if (t.ok) { rows = t.rows; render(); }
     } else msg($('pMsg'),'error', r.error);
     $('pSave').disabled = false;
