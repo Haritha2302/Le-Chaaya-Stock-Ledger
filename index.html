@@ -79,7 +79,13 @@
 .more-fields { display: none; }
 .item.showmore .more-fields { display: block; }
 .morelink { display: inline-block; margin-top: 10px; font-size: 0.85rem; color: var(--gold-deep); text-decoration: underline; cursor: pointer; }
-input[type=date] { -webkit-appearance: none; appearance: none; min-height: 47px; background: var(--cream); }
+input, select { min-height: 47px; }
+input[type=date] { -webkit-appearance: none; appearance: none; background: var(--cream); }
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+  .section-h { font-size:0.78rem; letter-spacing:0.18em; text-transform:uppercase; color:var(--gold-deep); margin:16px 4px 8px; }
 </style>
 </head>
 <body>
@@ -140,8 +146,8 @@ input[type=date] { -webkit-appearance: none; appearance: none; min-height: 47px;
               </div>
               <label>Batch no</label>
               <input id="pBatch" placeholder="From packet, if printed">
-              <label>Bill photo link</label>
-              <input id="pPhoto" placeholder="Google Drive link (optional)">
+              <label>Bill photo</label>
+              <input id="pPhotoFile" type="file" accept="image/*" capture="environment">
               <div class="hint">One entry per batch — if a delivery has multiple mfg dates, record each separately with the same doc no.</div>
             </details>
               
@@ -173,6 +179,16 @@ input[type=date] { -webkit-appearance: none; appearance: none; min-height: 47px;
 
   const $ = id => document.getElementById(id);
 
+  let photoB64 = '';
+  async function shrink(file) {
+    const img = await createImageBitmap(file);
+    const s = Math.min(1, 1400 / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width = img.width * s; c.height = img.height * s;
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.8).split(',')[1];
+  }
+  
   async function api(payload) {
     const res = await fetch(SCRIPT_URL, {
       method:'POST',
@@ -240,35 +256,40 @@ input[type=date] { -webkit-appearance: none; appearance: none; min-height: 47px;
   function fmt(v) { return (v === '' || v == null) ? '—' : v; }
 
   function renderEntry() {
-    $('entryList').innerHTML = rows.map(r => {
-      const done = r.countedBy !== '';
-      return '<div class="item" data-sku="' + r.sku + '">' +
-        '<div class="head" onclick="toggle(this)"><strong>' + r.item + '</strong>' +
-        '<span class="badge ' + (done ? 'done' : '') + '">' + (done ? 'Entered' : 'Pending') + '</span></div>' +
-        '<div class="body">' +
-        '<div class="facts">Opening: <b>' + fmt(r.opening) + ' ' + r.unit + '</b> · Purchased today: <b>' + fmt(r.purchased) + '</b></div>' +
-        '<div class="row2">' +
-          '<div><label>Billed (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-billed" value="' + (r.billed ?? '') + '"></div>' +
-          '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '"></div>' +
-        '</div>' +
-        '<a class="morelink" onclick="this.closest(\'.item\').classList.toggle(\'showmore\')">+ wastage, staff excess, comp, remarks</a>' +
-        '<div class="more-fields">' +
-        '<div class="row2">' +
-          '<div><label>Wastage</label><input type="number" step="any" min="0" class="f-wastage" value="' + (r.wastage ?? '') + '"></div>' +
-          '<div><label>Reason</label><select class="f-wastageReason">' +
-            '<option value=""></option>' +
-            boot.wastageReasons.map(w => '<option' + (r.wastageReason === w ? ' selected' : '') + '>' + w + '</option>').join('') +
-          '</select></div>' +
-        '</div>' +
-        '<div class="row2">' +
-          '<div><label>Staff excess</label><input type="number" step="any" min="0" class="f-staffExcess" value="' + (r.staffExcess ?? '') + '"></div>' +
-          '<div><label>Comp/Sampling</label><input type="number" step="any" min="0" class="f-comp" value="' + (r.comp ?? '') + '"></div>' +
-        '</div>' +
-        '<div><label>Opening count (optional)</label><input type="number" step="any" min="0" class="f-openingCount" value="' + (r.openingCount ?? '') + '"></div>' +
-        '<label>Remarks</label><input class="f-remarks" value="' + (r.remarks || '') + '">' +
-        '</div>' +
-        '<button class="btn small" onclick="saveEntry(\'' + r.sku + '\', this)">Save ' + r.item + '</button>' +
-        '</div></div>';
+    const catBySku = {}; boot.items.forEach(i => catBySku[i.sku] = i.category || 'Other');
+    const order = ['F&B', 'Supplies', 'Other'];
+    $('entryList').innerHTML = order.map(cat => {
+      const group = rows.filter(r => (catBySku[r.sku] || 'Other') === cat);
+      if (!group.length) return '';
+      return '<div class="section-h">' + cat + '</div>' + group.map(r => {
+        const done = r.countedBy !== '';
+        return '<div class="item" data-sku="' + r.sku + '">' +
+          '<div class="head" onclick="toggle(this)"><strong>' + r.item + '</strong>' +
+          '<span class="badge ' + (done ? 'done' : '') + '">' + (done ? 'Entered' : 'Pending') + '</span></div>' +
+          '<div class="body">' +
+          '<div class="facts">Opening: <b>' + fmt(r.opening) + ' ' + r.unit + '</b> · Purchased today: <b>' + fmt(r.purchased) + '</b></div>' +
+          '<div class="row2">' +
+            '<div><label>Used/Sold (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-billed" value="' + (r.billed ?? '') + '"></div>' +
+            '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '"></div>' +
+          '</div>' +
+          '<a class="morelink" onclick="this.closest(\'.item\').classList.toggle(\'showmore\')">+ wastage, comp, remarks</a>' +
+          '<div class="more-fields">' +
+          '<div class="row2">' +
+            '<div><label>Wastage</label><input type="number" step="any" min="0" class="f-wastage" value="' + (r.wastage ?? '') + '"></div>' +
+            '<div><label>Reason</label><select class="f-wastageReason">' +
+              '<option value=""></option>' +
+              boot.wastageReasons.map(w => '<option' + (r.wastageReason === w ? ' selected' : '') + '>' + w + '</option>').join('') +
+            '</select></div>' +
+          '</div>' +
+          '<div class="row2">' +
+            '<div><label>Comp/Sampling</label><input type="number" step="any" min="0" class="f-comp" value="' + (r.comp ?? '') + '"></div>' +
+          '</div>' +
+          '<div><label>Opening count (optional)</label><input type="number" step="any" min="0" class="f-openingCount" value="' + (r.openingCount ?? '') + '"></div>' +
+          '<label>Remarks</label><input class="f-remarks" value="' + (r.remarks || '') + '">' +
+          '</div>' +
+          '<button class="btn small" onclick="saveEntry(\'' + r.sku + '\', this)">Save ' + r.item + '</button>' +
+          '</div></div>';
+        }).join('');
     }).join('') || '<div class="hint">No items yet — start the day above.</div>';
   }
 
@@ -320,7 +341,7 @@ input[type=date] { -webkit-appearance: none; appearance: none; min-height: 47px;
       action:'saveEntry', sku:sku,
       openingCount:g('f-openingCount'), billed:g('f-billed'),
       wastage:g('f-wastage'), wastageReason:g('f-wastageReason'),
-      staffExcess:g('f-staffExcess'), comp:g('f-comp'),
+      staffExcess:'', comp:g('f-comp'),
       physicalClosing:g('f-physicalClosing'), remarks:g('f-remarks')
     });
     if (r.ok) { rows = r.rows; render(); msg($('mainMsg'),'ok','Saved.'); }
@@ -334,6 +355,10 @@ input[type=date] { -webkit-appearance: none; appearance: none; min-height: 47px;
     else { msg($('mainMsg'),'error', r.error); btn.disabled = false; }
   };
 
+  $('pPhotoFile').addEventListener('change', async e => {
+    photoB64 = e.target.files[0] ? await shrink(e.target.files[0]) : '';
+  });
+
   $('pSave').addEventListener('click', async () => {
     $('pSave').disabled = true;
     const r = await api({
@@ -344,11 +369,12 @@ input[type=date] { -webkit-appearance: none; appearance: none; min-height: 47px;
       mfgDate:$('pMfg').value, expiryDate:$('pExp').value,
       docType:$('pDocType').value, docNo:$('pDocNo').value,
       paymentStatus:$('pPayStatus').value, paymentRef:$('pPayRef').value,
-      billPhoto:$('pPhoto').value
+      photoBase64: photoB64
     });
     if (r.ok) {
       msg($('pMsg'),'ok','Recorded: ' + r.qty + ' × ' + r.item + ' · Doc no: ' + r.docNo);
-      ['pQty','pRate','pSupplier','pBatch','pMfg','pExp','pDocNo','pPayRef','pPhoto'].forEach(id => $(id).value = '');
+      ['pQty','pRate','pSupplier','pBatch','pMfg','pExp','pDocNo','pPayRef'].forEach(id => $(id).value = '');
+      photoB64 = ''; $('pPhotoFile').value = '';
       const t = await api({ action:'today' }); if (t.ok) { rows = t.rows; render(); }
     } else msg($('pMsg'),'error', r.error);
     $('pSave').disabled = false;
