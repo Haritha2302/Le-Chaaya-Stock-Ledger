@@ -278,8 +278,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
   function fmt(v) { return (v === '' || v == null) ? '—' : v; }
 
   function renderEntry() {
-    const catBySku = {}, trackBySku = {};
-    boot.items.forEach(i => { catBySku[i.sku] = i.category || 'Other'; trackBySku[i.sku] = i.track || 'Unit'; });
+    const catBySku = {}; boot.items.forEach(i => catBySku[i.sku] = i.category || 'Other');
     const order = ['F&B', 'Supplies', 'Other'];
     $('entryList').innerHTML = order.map(cat => {
       const group = rows.filter(r => (catBySku[r.sku] || 'Other') === cat);
@@ -295,13 +294,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
           '<span class="badge ' + (done ? 'done' : '') + '">' + (done ? 'Entered' : 'Pending') + '</span></div>' +
           '<div class="body">' +
           '<div class="facts">Opening: <b>' + fmt(r.opening) + ' ' + r.unit + '</b> · Purchased today: <b>' + fmt(r.purchased) + '</b></div>' +
-          (trackBySku[r.sku] === 'Bulk'
-            ? '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '"></div>' +
-              '<div class="hint">Usage is calculated automatically from your count.</div>'
-            : '<div class="row2">' +
-              '<div><label>Sold today — from POS (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-billed" value="' + (r.billed ?? '') + '"></div>' +
-              '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '"></div>' +
-            '</div>') +
+          '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '"></div>' +
+          '<div class="hint">Usage is calculated automatically from your count.</div>' +
           '<a class="morelink" onclick="this.closest(\'.item\').classList.toggle(\'showmore\')">+ wastage, comp, remarks</a>' +
           '<div class="more-fields">' +
           '<div class="row2">' +
@@ -338,11 +332,11 @@ details.batch > summary::-webkit-details-marker { display: none; }
         '<div class="facts">' +
           'Opening ' + fmt(r.opening) + (r.openingCount !== '' && r.openingCount != null ? ' (counted ' + r.openingCount + ', overnight var ' + fmt(r.overnightVar) + ')' : '') +
           ' · Purchased ' + fmt(r.purchased) +
-          ' · Billed ' + fmt(r.billed) +
+          '' +
           ' · Wastage ' + fmt(r.wastage) + (r.wastageReason ? ' (' + r.wastageReason + ')' : '') +
           ' · Staff excess ' + fmt(r.staffExcess) +
           ' · Comp ' + fmt(r.comp) +
-          '<br>Expected <b>' + fmt(r.expected) + '</b> · Counted <b>' + fmt(r.physical) + '</b> · Variance <b>' + fmt(r.variance) + '</b>' +
+          '<br>Counted <b>' + fmt(r.physical) + '</b> · Usage today <b>' + fmt(r.usage) + '</b>' +
           (r.remarks ? '<br>Remarks: ' + r.remarks : '') +
           (counted ? '<br>Entered by ' + r.countedBy : '') +
           (verified ? ' · Verified by ' + r.verifiedBy : '') +
@@ -369,8 +363,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
     btn.disabled = true;
     const r = await api({
       action:'saveEntry', sku:sku,
-      openingCount:g('f-openingCount'),
-      billed:(card.querySelector('.f-billed') ? g('f-billed') : ''),
+      openingCount:g('f-openingCount'), billed:'',
       wastage:g('f-wastage'), wastageReason:g('f-wastageReason'),
       staffExcess:'', comp:g('f-comp'),
       physicalClosing:g('f-physicalClosing'), remarks:g('f-remarks')
