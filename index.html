@@ -278,7 +278,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
   function fmt(v) { return (v === '' || v == null) ? '—' : v; }
 
   function renderEntry() {
-    const catBySku = {}; boot.items.forEach(i => catBySku[i.sku] = i.category || 'Other');
+    const catBySku = {}, trackBySku = {};
+    boot.items.forEach(i => { catBySku[i.sku] = i.category || 'Other'; trackBySku[i.sku] = i.track || 'Unit'; });
     const order = ['F&B', 'Supplies', 'Other'];
     $('entryList').innerHTML = order.map(cat => {
       const group = rows.filter(r => (catBySku[r.sku] || 'Other') === cat);
@@ -294,10 +295,13 @@ details.batch > summary::-webkit-details-marker { display: none; }
           '<span class="badge ' + (done ? 'done' : '') + '">' + (done ? 'Entered' : 'Pending') + '</span></div>' +
           '<div class="body">' +
           '<div class="facts">Opening: <b>' + fmt(r.opening) + ' ' + r.unit + '</b> · Purchased today: <b>' + fmt(r.purchased) + '</b></div>' +
-          '<div class="row2">' +
-            '<div><label>Used/Sold (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-billed" value="' + (r.billed ?? '') + '"></div>' +
-            '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '"></div>' +
-          '</div>' +
+          (trackBySku[r.sku] === 'Bulk'
+            ? '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '"></div>' +
+              '<div class="hint">Usage is calculated automatically from your count.</div>'
+            : '<div class="row2">' +
+              '<div><label>Sold today — from POS (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-billed" value="' + (r.billed ?? '') + '"></div>' +
+              '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '"></div>' +
+            '</div>') +
           '<a class="morelink" onclick="this.closest(\'.item\').classList.toggle(\'showmore\')">+ wastage, comp, remarks</a>' +
           '<div class="more-fields">' +
           '<div class="row2">' +
@@ -365,7 +369,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
     btn.disabled = true;
     const r = await api({
       action:'saveEntry', sku:sku,
-      openingCount:g('f-openingCount'), billed:g('f-billed'),
+      openingCount:g('f-openingCount'),
+      billed:(card.querySelector('.f-billed') ? g('f-billed') : ''),
       wastage:g('f-wastage'), wastageReason:g('f-wastageReason'),
       staffExcess:'', comp:g('f-comp'),
       physicalClosing:g('f-physicalClosing'), remarks:g('f-remarks')
