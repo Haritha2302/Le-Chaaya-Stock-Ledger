@@ -74,6 +74,12 @@
     border-radius:11px; color:var(--gold-deep); text-align:center; font-size:0.95rem; letter-spacing:0.05em;
   }
   .hint { font-size:0.8rem; color:#8b7d66; margin-top:4px; }
+
+.badge { white-space: nowrap; }
+.more-fields { display: none; }
+.item.showmore .more-fields { display: block; }
+.morelink { display: inline-block; margin-top: 10px; font-size: 0.85rem; color: var(--gold-deep); text-decoration: underline; cursor: pointer; }
+input[type=date] { -webkit-appearance: none; appearance: none; min-height: 47px; background: var(--cream); }
 </style>
 </head>
 <body>
@@ -126,15 +132,19 @@
               <div><label>Payment status</label><select id="pPayStatus"></select></div>
               <div><label>Payment ref (UPI ID)</label><input id="pPayRef" placeholder="Txn ID"></div>
             </div>
-            <div class="row2">
-              <div><label>Mfg date</label><input id="pMfg" type="date"></div>
-              <div><label>Expiry date</label><input id="pExp" type="date"></div>
-            </div>
-            <label>Batch no</label>
-            <input id="pBatch" placeholder="From packet, if printed">
-            <label>Bill photo link</label>
-            <input id="pPhoto" placeholder="Google Drive link (optional)">
-            <div class="hint">One entry per batch — if a delivery has multiple mfg dates, record each separately with the same doc no.</div>
+
+            <details><summary class="morelink" style="text-decoration:none">+ Batch details — mfg/expiry, batch no, bill photo</summary>
+              <div class="row2">
+                <div><label>Mfg date</label><input id="pMfg" type="date"></div>
+                <div><label>Expiry date</label><input id="pExp" type="date"></div>
+              </div>
+              <label>Batch no</label>
+              <input id="pBatch" placeholder="From packet, if printed">
+              <label>Bill photo link</label>
+              <input id="pPhoto" placeholder="Google Drive link (optional)">
+              <div class="hint">One entry per batch — if a delivery has multiple mfg dates, record each separately with the same doc no.</div>
+            </details>
+              
             <button class="btn" id="pSave">Save purchase</button>
             <div class="msg" id="pMsg"></div>
           </div>
@@ -236,11 +246,13 @@
         '<div class="head" onclick="toggle(this)"><strong>' + r.item + '</strong>' +
         '<span class="badge ' + (done ? 'done' : '') + '">' + (done ? 'Entered' : 'Pending') + '</span></div>' +
         '<div class="body">' +
-        '<div class="facts">Opening (carried): <b>' + fmt(r.opening) + ' ' + r.unit + '</b> · Purchased today: <b>' + fmt(r.purchased) + '</b></div>' +
+        '<div class="facts">Opening: <b>' + fmt(r.opening) + ' ' + r.unit + '</b> · Purchased today: <b>' + fmt(r.purchased) + '</b></div>' +
         '<div class="row2">' +
-          '<div><label>Opening count (optional)</label><input type="number" step="any" min="0" class="f-openingCount" value="' + (r.openingCount ?? '') + '"></div>' +
-          '<div><label>Billed</label><input type="number" step="any" min="0" class="f-billed" value="' + (r.billed ?? '') + '"></div>' +
+          '<div><label>Billed (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-billed" value="' + (r.billed ?? '') + '"></div>' +
+          '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '"></div>' +
         '</div>' +
+        '<a class="morelink" onclick="this.closest(\'.item\').classList.toggle(\'showmore\')">+ wastage, staff excess, comp, remarks</a>' +
+        '<div class="more-fields">' +
         '<div class="row2">' +
           '<div><label>Wastage</label><input type="number" step="any" min="0" class="f-wastage" value="' + (r.wastage ?? '') + '"></div>' +
           '<div><label>Reason</label><select class="f-wastageReason">' +
@@ -252,8 +264,9 @@
           '<div><label>Staff excess</label><input type="number" step="any" min="0" class="f-staffExcess" value="' + (r.staffExcess ?? '') + '"></div>' +
           '<div><label>Comp/Sampling</label><input type="number" step="any" min="0" class="f-comp" value="' + (r.comp ?? '') + '"></div>' +
         '</div>' +
-        '<label>Physical closing count</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '">' +
+        '<div><label>Opening count (optional)</label><input type="number" step="any" min="0" class="f-openingCount" value="' + (r.openingCount ?? '') + '"></div>' +
         '<label>Remarks</label><input class="f-remarks" value="' + (r.remarks || '') + '">' +
+        '</div>' +
         '<button class="btn small" onclick="saveEntry(\'' + r.sku + '\', this)">Save ' + r.item + '</button>' +
         '</div></div>';
     }).join('') || '<div class="hint">No items yet — start the day above.</div>';
