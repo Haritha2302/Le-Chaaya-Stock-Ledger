@@ -284,7 +284,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
       const group = rows.filter(r => (catBySku[r.sku] || 'Other') === cat);
       if (!group.length) return '';
       const pending = group.filter(r => r.countedBy === '').length;
-      return '<details class="sect"' + (cat === 'F&B' ? ' open' : '') + '>' +
+      return '<details class="sect">' +
         '<summary class="section-h">' + cat +
         '<span class="sect-count">' + (pending ? pending + ' pending' : 'all entered ✓') + '</span></summary>' +
         group.map(r => {
