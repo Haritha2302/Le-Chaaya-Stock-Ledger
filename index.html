@@ -198,7 +198,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
   let cred = { empId:'', pin:'' };
   let boot = null;       // items + dropdown lists
   let rows = [];         // today's rows
-
+  let lastSavedSku = null;
+  
   const $ = id => document.getElementById(id);
 
   let photoB64 = '';
@@ -277,14 +278,22 @@ details.batch > summary::-webkit-details-marker { display: none; }
 
   function fmt(v) { return (v === '' || v == null) ? '—' : v; }
 
+  function isMine(countedBy) {
+    const m = String(countedBy).match(/\(([^)]+)\)\s*$/);
+    return !!m && m[1].toUpperCase() === cred.empId.toUpperCase();
+  }
+
   function renderEntry() {
+    const openSects = new Set(Array.from(document.querySelectorAll('#entryList details.sect[open]')).map(d => d.dataset.cat));
+    const openItems = new Set(Array.from(document.querySelectorAll('#entryList .item.open')).map(d => d.dataset.sku));
+    const moreItems = new Set(Array.from(document.querySelectorAll('#entryList .item.showmore')).map(d => d.dataset.sku));
     const catBySku = {}; boot.items.forEach(i => catBySku[i.sku] = i.category || 'Other');
     const order = ['F&B', 'Supplies', 'Other'];
     $('entryList').innerHTML = order.map(cat => {
       const group = rows.filter(r => (catBySku[r.sku] || 'Other') === cat);
       if (!group.length) return '';
       const pending = group.filter(r => r.countedBy === '').length;
-      return '<details class="sect">' +
+      return '<details class="sect" data-cat="' + cat + '">' +
         '<summary class="section-h">' + cat +
         '<span class="sect-count">' + (pending ? pending + ' pending' : 'all entered ✓') + '</span></summary>' +
         group.map(r => {
@@ -315,6 +324,14 @@ details.batch > summary::-webkit-details-marker { display: none; }
           '</div></div>';
         }).join('') + '</details>';
     }).join('') || '<div class="hint">No items yet — start the day above.</div>';
+    document.querySelectorAll('#entryList details.sect').forEach(d => { if (openSects.has(d.dataset.cat)) d.open = true; });
+    document.querySelectorAll('#entryList .item').forEach(d => {
+      if (d.dataset.sku !== lastSavedSku) {
+        if (openItems.has(d.dataset.sku)) d.classList.add('open');
+        if (moreItems.has(d.dataset.sku)) d.classList.add('showmore');
+      }
+    });
+    lastSavedSku = null;
   }
 
   function renderReview() {
@@ -341,7 +358,11 @@ details.batch > summary::-webkit-details-marker { display: none; }
           (counted ? '<br>Entered by ' + r.countedBy : '') +
           (verified ? ' · Verified by ' + r.verifiedBy : '') +
         '</div>' +
-        (counted && !verified ? '<button class="btn small leaf" onclick="verify(\'' + r.sku + '\', this)">Verify</button>' : '') +
+        (counted && !verified
+          ? (isMine(r.countedBy)
+              ? '<div class="hint">You entered this — another person will verify it.</div>'
+              : '<button class="btn small leaf" onclick="verify(\'' + r.sku + '\', this)">Verify</button>')
+          : '') +
         '</div></div>';
     }).join('') || '<div class="hint">Nothing to review yet.</div>';
   }
@@ -368,7 +389,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
       staffExcess:'', comp:g('f-comp'),
       physicalClosing:g('f-physicalClosing'), remarks:g('f-remarks')
     });
-    if (r.ok) { rows = r.rows; render(); msg($('mainMsg'),'ok','Saved.'); }
+    if (r.ok) { lastSavedSku = sku; rows = r.rows; render(); msg($('mainMsg'),'ok','Saved.'); }
     else { msg($('mainMsg'),'error', r.error); btn.disabled = false; }
   };
 
