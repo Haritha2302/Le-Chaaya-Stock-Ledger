@@ -123,8 +123,21 @@ details.batch > summary::-webkit-details-marker { display: none; }
     </div>
 
     <!-- MAIN -->
+    <div id="home" style="display:none">
+      <div class="topbar"><span id="helloHome"></span><a href="#" onclick="location.reload();return false;">Sign out</a></div>
+      <button class="btn" id="goStock">Stock ledger</button>
+      <button class="btn" id="goCash">Cash count</button>
+    </div>
+
+    <div id="cashPane" style="display:none">
+      <div class="topbar"><a href="#" id="cashHome">← Home</a><a href="#" onclick="location.reload();return false;">Sign out</a></div>
+      <div id="cashList"></div>
+      <div class="msg" id="cashMsg"></div>
+    </div>
+
     <div id="main" style="display:none">
       <div class="topbar">
+        <a href="#" id="stockHome">← Home</a>
         <span id="hello"></span>
         <a href="#" id="logout">Sign out</a>
       </div>
@@ -236,13 +249,65 @@ details.batch > summary::-webkit-details-marker { display: none; }
       try { localStorage.setItem('lc_stock_emp', cred.empId); } catch(e){}
       $('hello').textContent = 'Hi, ' + r.name;
       $('loginCard').style.display = 'none';
-      $('main').style.display = 'block';
+      $('helloHome').textContent = 'Hi, ' + r.name;
+      $('home').style.display = 'block';
       await loadAll();
     } catch(e) { msg($('loginMsg'),'error','Could not reach the server.'); }
     $('loginBtn').disabled = false;
   });
 
   $('logout').addEventListener('click', e => { e.preventDefault(); location.reload(); });
+
+  $('goStock').addEventListener('click', () => { $('home').style.display = 'none'; $('main').style.display = 'block'; });
+  $('goCash').addEventListener('click', async () => { $('home').style.display = 'none'; $('cashPane').style.display = 'block'; await loadCash(); });
+  $('stockHome').addEventListener('click', e => { e.preventDefault(); $('main').style.display = 'none'; $('home').style.display = 'block'; });
+  $('cashHome').addEventListener('click', e => { e.preventDefault(); $('cashPane').style.display = 'none'; $('home').style.display = 'block'; });
+
+  const CASH_DENOMS = [500, 200, 100, 50, 20, 10, 5, 2, 1];
+  let cash = {};
+
+  async function loadCash() {
+    const r = await api({ action: 'cashToday' });
+    if (r.ok) { cash = r.cash || {}; renderCash(); }
+    else msg($('cashMsg'), 'error', r.error);
+  }
+
+  function renderCash() {
+    $('cashList').innerHTML = ['Opening', 'Closing'].map(s => {
+      const d = cash[s] || null;
+      return '<div class="item open" data-session="' + s + '">' +
+        '<div class="head"><strong>' + s + ' cash count</strong>' +
+        '<span class="badge ' + (d ? 'done' : '') + '">' + (d ? 'Entered' : 'Pending') + '</span></div>' +
+        '<div class="body" style="display:block">' +
+        CASH_DENOMS.map((v, i) =>
+          '<div class="row2" style="align-items:center"><div><label>₹' + v + ' × count</label></div>' +
+          '<div><input type="number" min="0" step="1" class="d-' + v + '" value="' + (d ? (d.counts[i] || '') : '') + '" oninput="cashTotal(this.closest(\'.item\'))"></div></div>'
+        ).join('') +
+        '<div class="facts">Total: ₹<b class="cash-total">' + (d ? d.total : 0) + '</b></div>' +
+        '<label>Remarks (refunds, cash taken out, etc.)</label>' +
+        '<input class="f-cashRemarks" value="' + (d ? d.remarks : '') + '">' +
+        (d && d.enteredBy ? '<div class="hint">Entered by ' + d.enteredBy + '</div>' : '') +
+        '<button class="btn small" onclick="saveCash(\'' + s + '\', this)">Save ' + s.toLowerCase() + ' count</button>' +
+        '</div></div>';
+    }).join('');
+  }
+
+  window.cashTotal = card => {
+    const t = CASH_DENOMS.reduce((s, v) => s + v * (Number(card.querySelector('.d-' + v).value) || 0), 0);
+    card.querySelector('.cash-total').textContent = t;
+  };
+
+  window.saveCash = async (session, btn) => {
+    const card = btn.closest('.item');
+    btn.disabled = true;
+    const r = await api({
+      action: 'saveCash', session: session,
+      counts: CASH_DENOMS.map(v => card.querySelector('.d-' + v).value),
+      remarks: card.querySelector('.f-cashRemarks').value
+    });
+    if (r.ok) { cash = r.cash; renderCash(); msg($('cashMsg'), 'ok', session + ' count saved — total ₹' + r.total + '.'); }
+    else { msg($('cashMsg'), 'error', r.error); btn.disabled = false; }
+  };
 
   function syncDocNo() {
     const isVoucher = $('pDocType').value === 'Self Voucher';
