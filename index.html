@@ -147,10 +147,6 @@ details.batch > summary::-webkit-details-marker { display: none; }
         <span id="hello"></span>
         <a href="#" id="logout">Sign out</a>
       </div>
-      <div class="tabs">
-        <button id="tabEnter" class="on">Enter</button>
-        <button id="tabReview">Review</button>
-      </div>
 
       <!-- ENTER MODE -->
       <div id="enterPane">
@@ -201,12 +197,6 @@ details.batch > summary::-webkit-details-marker { display: none; }
         <div id="entryList"></div>
         <button class="btn leaf" id="confirmOpeningBtn" style="display:none">Confirm opening counts — start selling</button>
         <button class="btn leaf" id="confirmClosingBtn" style="display:none">Confirm closing — end the stock day</button>
-      </div>
-
-      <!-- REVIEW MODE -->
-      <div id="reviewPane" style="display:none">
-        <div class="hint" style="margin-bottom:10px">Verify each item after checking the numbers. You cannot verify items you entered yourself.</div>
-        <div id="reviewList"></div>
       </div>
 
       <div class="msg" id="mainMsg"></div>
@@ -454,15 +444,10 @@ details.batch > summary::-webkit-details-marker { display: none; }
     $('confirmOpeningBtn').style.display = (rows.length > 0 && phase === 'MORNING') ? 'block' : 'none';
     $('confirmClosingBtn').style.display = (rows.length > 0 && phase === 'DAY') ? 'block' : 'none';
     $('importUsageBtn').style.display = (rows.length > 0 && phase === 'DAY') ? 'block' : 'none';
-    renderEntry(); renderReview();
+    renderEntry();
   }
 
   function fmt(v) { return (v === '' || v == null) ? '—' : v; }
-
-  function isMine(countedBy) {
-    const m = String(countedBy).match(/\(([^)]+)\)\s*$/);
-    return !!m && m[1].toUpperCase() === cred.empId.toUpperCase();
-  }
 
   function renderEntry() {
     const openSects = new Set(Array.from(document.querySelectorAll('#entryList details.sect[open]')).map(d => d.dataset.cat));
@@ -509,6 +494,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
     document.querySelectorAll('#entryList details.sect').forEach(d => { if (openSects.has(d.dataset.cat)) d.open = true; });
     document.querySelectorAll('#entryList .item').forEach(d => {
       if (d.dataset.sku !== lastSavedSku && openItems.has(d.dataset.sku)) d.classList.add('open');
+      if (phase === 'CLOSED') d.querySelectorAll('input, select').forEach(el => el.disabled = true);
       recalc(d);
     });
     lastSavedSku = null;
@@ -540,34 +526,6 @@ details.batch > summary::-webkit-details-marker { display: none; }
     }
   };
 
-  function renderReview() {
-    $('reviewList').innerHTML = rows.map(r => {
-      const counted = r.countedBy !== '';
-      const verified = r.verifiedBy !== '';
-      const hasVar = r.variance !== '' && r.variance != null && Number(r.variance) !== 0;
-      let badge = verified ? '<span class="badge vrf">Verified</span>'
-                : counted ? '<span class="badge done">Awaiting review</span>'
-                : '<span class="badge">Not entered</span>';
-      if (hasVar) badge += ' <span class="badge var">Var: ' + r.variance + '</span>';
-      return '<div class="item open">' +
-        '<div class="head"><strong>' + r.item + '</strong><span>' + badge + '</span></div>' +
-        '<div class="body" style="display:block">' +
-        '<div class="facts">' +
-          'Opening ' + fmt(r.opening) + (r.openingCount !== '' && r.openingCount != null ? ' (counted ' + r.openingCount + ', overnight var ' + fmt(r.overnightVar) + ')' : '') +
-          ' · Purchased ' + fmt(r.purchased) +
-          '' +
-          ' · Wastage ' + fmt(r.wastage) + (r.wastageReason ? ' (' + r.wastageReason + ')' : '') +
-           '' +
-          ' · Comp ' + fmt(r.comp) +
-          '<br>Counted <b>' + fmt(r.physical) + '</b> · Usage today <b>' + fmt(r.usage) + '</b>' +
-          (r.remarks ? '<br>Remarks: ' + r.remarks : '') +
-          (counted ? '<br>Entered by ' + r.countedBy : '') +
-          (verified ? ' · Verified by ' + r.verifiedBy : '') +
-        '</div>' +
-        '</div></div>';
-    }).join('') || '<div class="hint">Nothing to review yet.</div>';
-  }
-
   window.toggle = el => el.parentElement.classList.toggle('open');
 
   // ── ACTIONS ──
@@ -589,9 +547,13 @@ details.batch > summary::-webkit-details-marker { display: none; }
   });
 
   $('confirmClosingBtn').addEventListener('click', async () => {
-    const pending = rows.filter(r => r.countedBy === '').length;
-    const warn = pending ? pending + ' item(s) have no closing entry yet. ' : '';
-    if (!confirm(warn + 'After confirming, today\'s stock entries are locked. Confirm closing?')) return;
+    const missing = rows.filter(r => r.physical === '' || r.physical == null);
+    if (missing.length) {
+      msg($('mainMsg'), 'error', 'Enter and save a closing count for every item first. Missing: ' +
+        missing.slice(0, 8).map(m => m.item).join(', ') + (missing.length > 8 ? '…' : ''), $('confirmClosingBtn'));
+      return;
+    }
+    if (!confirm('After confirming, today\'s stock entries are locked. Confirm closing?')) return;
     $('confirmClosingBtn').disabled = true;
     const r = await api({ action: 'confirmClosing' });
     if (r.ok) { rows = r.rows; phase = r.phase; render(); msg($('mainMsg'), 'ok', 'Stock day closed.', $('importUsageBtn')); }
@@ -631,13 +593,6 @@ details.batch > summary::-webkit-details-marker { display: none; }
     else { msg($('mainMsg'),'error', r.error); btn.disabled = false; }
   };
 
-  window.verify = async (sku, btn) => {
-    btn.disabled = true;
-    const r = await api({ action:'verify', sku:sku });
-    if (r.ok) { rows = r.rows; render(); msg($('mainMsg'),'ok','Verified.'); }
-    else { msg($('mainMsg'),'error', r.error); btn.disabled = false; }
-  };
-
   $('pPhotoBtn').addEventListener('click', () => $('pPhotoFile').click());
   $('pPhotoFile').addEventListener('change', async e => {
     photoB64 = e.target.files[0] ? await shrink(e.target.files[0]) : '';
@@ -664,16 +619,6 @@ details.batch > summary::-webkit-details-marker { display: none; }
     } else msg($('pMsg'),'error', r.error);
     $('pSave').disabled = false;
   });
-
-  // ── TABS ──
-  $('tabEnter').addEventListener('click', () => setTab('enter'));
-  $('tabReview').addEventListener('click', () => setTab('review'));
-  function setTab(t) {
-    $('tabEnter').className = t === 'enter' ? 'on' : '';
-    $('tabReview').className = t === 'review' ? 'on' : '';
-    $('enterPane').style.display = t === 'enter' ? 'block' : 'none';
-    $('reviewPane').style.display = t === 'review' ? 'block' : 'none';
-  }
 
   // prefill last employee id
   try { const last = localStorage.getItem('lc_stock_emp'); if (last) $('empId').value = last; } catch(e){}
