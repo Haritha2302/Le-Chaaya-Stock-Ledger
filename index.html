@@ -269,35 +269,40 @@ details.batch > summary::-webkit-details-marker { display: none; }
 
   const CASH_DENOMS = [500, 200, 100, 50, 20, 10, 5, 2, 1];
   let cash = {};
-  let lockbox = 0;
+  let lockbox = 0; let cashMeta = {};
 
   async function loadCash() {
     const r = await api({ action: 'cashToday' });
-    if (r.ok) { cash = r.cash || {}; lockbox = r.lockbox || 0; renderCash(); }
+    if (r.ok) { cash = r.cash || {}; lockbox = r.lockbox || 0; cashMeta = r.meta || {}; renderCash(); }
     else msg($('cashMsg'), 'error', r.error);
   }
 
   function renderCash() {
     $('cashList').innerHTML = ['Opening', 'Closing'].map(s => {
       const d = cash[s] || null;
+      const locked = (s === 'Opening' && cashMeta.openingLocked) || (s === 'Closing' && cashMeta.closingLocked);
+      const dis = locked ? ' disabled' : '';
       return '<div class="item open" data-session="' + s + '">' +
         '<div class="head"><strong>' + s + ' cash count</strong>' +
         '<span class="badge ' + (d ? 'done' : '') + '">' + (d ? 'Entered' : 'Pending') + '</span></div>' +
         '<div class="body" style="display:block">' +
         CASH_DENOMS.map((v, i) =>
           '<div class="row2" style="align-items:center"><div><label>₹' + v + ' × count</label></div>' +
-          '<div><input type="number" min="0" step="1" class="d-' + v + '" value="' + (d ? (d.counts[i] || '') : '') + '" oninput="cashTotal(this.closest(\'.item\'))"></div></div>'
+          '<div><input type="number" min="0" step="1" class="d-' + v + '" value="' + (d ? (d.counts[i] || '') : '') + '"' + dis + ' oninput="cashTotal(this.closest(\'.item\'))"></div></div>'
         ).join('') +
         '<div class="facts">Total: ₹<b class="cash-total">' + (d ? d.total : 0) + '</b></div>' +
         (s === 'Opening' ? '<div class="calcline c-openfloat"></div>' : '') +
         (s === 'Closing'
-          ? '<div><label>Moved to lockbox (₹)</label><input type="number" min="0" step="1" class="f-moved" value="' + (d ? (d.moved || '') : '') + '" oninput="cashTotal(this.closest(\'.item\'))"></div>' +
+          ? '<div class="calcline c-closevar"></div>' +
+            '<div><label>Moved to lockbox (₹)</label><input type="number" min="0" step="1" class="f-moved" value="' + (d ? (d.moved || '') : '') + '"' + dis + ' oninput="cashTotal(this.closest(\'.item\'))"></div>' +
             '<div class="calcline c-float"></div>'
           : '') +
         '<label>Remarks (refunds, cash taken out, etc.)</label>' +
-        '<input class="f-cashRemarks" value="' + (d ? d.remarks : '') + '">' +
+        '<input class="f-cashRemarks" value="' + (d ? d.remarks : '') + '"' + dis + '>' +
         (d && d.enteredBy ? '<div class="hint">Entered by ' + d.enteredBy + '</div>' : '') +
-        '<button class="btn small" onclick="saveCash(\'' + s + '\', this)">Save ' + s.toLowerCase() + ' count</button>' +
+        (locked
+          ? '<div class="hint">' + (s === 'Opening' ? 'Locked — closing has been recorded for today.' : 'Locked — a bank deposit has been recorded today.') + '</div>'
+          : '<button class="btn small" onclick="saveCash(\'' + s + '\', this)">Save ' + s.toLowerCase() + ' count</button>') +
         '</div></div>';
     }).join('') +
       '<div class="item open"><div class="head"><strong>Lockbox</strong><span class="badge">Balance ₹' + lockbox + '</span></div>' +
@@ -310,9 +315,27 @@ details.batch > summary::-webkit-details-marker { display: none; }
   }
 
   window.cashTotal = card => {
-    if (!card.querySelector('.d-' + CASH_DENOMS[0])) return;  // not a denomination card (e.g. Lockbox)
+    if (!card.querySelector('.d-' + CASH_DENOMS[0])) return;  // not a denomination card
     const t = CASH_DENOMS.reduce((s, v) => s + v * (Number(card.querySelector('.d-' + v).value) || 0), 0);
     card.querySelector('.cash-total').textContent = t;
+    const of = card.querySelector('.c-openfloat');
+    if (of) {
+      of.textContent = t === 250 ? 'Opening float ₹250 ✓' : 'Opening float should be ₹250 — counted ₹' + t;
+      of.className = 'calcline c-openfloat' + (t === 250 ? '' : ' bad');
+    }
+    const cv = card.querySelector('.c-closevar');
+    if (cv) {
+      const op = cash['Opening'];
+      if (op && cashMeta.posCash != null) {
+        const expected = op.total + cashMeta.posCash;
+        const v = Math.round((t - expected) * 100) / 100;
+        cv.textContent = 'Expected ₹' + expected + ' (opening ₹' + op.total + ' + POS cash ₹' + cashMeta.posCash + ')' + (v === 0 ? ' ✓' : ' — variance ₹' + v);
+        cv.className = 'calcline c-closevar' + (v === 0 ? '' : ' bad');
+      } else {
+        cv.textContent = cashMeta.posCash == null ? 'Import POS usage first to see the expected cash figure.' : 'Enter the opening count first.';
+        cv.className = 'calcline c-closevar';
+      }
+    }
     const mEl = card.querySelector('.f-moved');
     if (mEl) {
       const after = t - (Number(mEl.value) || 0);
@@ -320,19 +343,19 @@ details.batch > summary::-webkit-details-marker { display: none; }
       fl.textContent = 'Till after move: ₹' + after + (after === 250 ? ' ✓' : ' — should be ₹250');
       fl.className = 'calcline c-float' + (after === 250 ? '' : ' bad');
     }
-  const of = card.querySelector('.c-openfloat');
-    if (of) {
-      of.textContent = t === 250 ? 'Opening float ₹250 ✓' : 'Opening float should be ₹250 — counted ₹' + t;
-      of.className = 'calcline c-openfloat' + (t === 250 ? '' : ' bad');
-    }
   };
 
   window.saveCash = async (session, btn) => {
     const card = btn.closest('.item');
-    if (session === 'Opening') {
-      const t = Number(card.querySelector('.cash-total').textContent) || 0;
-      if (t !== 250 && !confirm('Opening float is ₹' + t + ' — that\'s ₹' + (t - 250) +
-          ' off the ₹250 float. Note the reason in remarks. Save anyway?')) return;
+    const t = Number(card.querySelector('.cash-total').textContent) || 0;
+    if (session === 'Opening' && t !== 250 &&
+        !confirm('Opening float is ₹' + t + ' — that\'s ₹' + (t - 250) + ' off the ₹250 float. Note the reason in remarks. Save anyway?')) return;
+    if (session === 'Closing') {
+      const op = cash['Opening'];
+      if (op && cashMeta.posCash != null) {
+        const v = t - (op.total + cashMeta.posCash);
+        if (v !== 0 && !confirm('Closing count ₹' + t + ' vs expected ₹' + (op.total + cashMeta.posCash) + ' — variance ₹' + v + '. Note the reason in remarks. Save anyway?')) return;
+      }
     }
     btn.disabled = true;
     const r = await api({
@@ -341,7 +364,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
       moved: (card.querySelector('.f-moved') ? card.querySelector('.f-moved').value : 0),
       remarks: card.querySelector('.f-cashRemarks').value
     });
-    if (r.ok) { cash = r.cash; renderCash(); msg($('cashMsg'), 'ok', session + ' count saved — total ₹' + r.total + '.'); }
+    if (r.ok) { cash = r.cash; lockbox = r.lockbox ?? lockbox; cashMeta = r.meta || cashMeta; renderCash(); msg($('cashMsg'), 'ok', session + ' count saved — total ₹' + r.total + '.'); }
     else { msg($('cashMsg'), 'error', r.error); btn.disabled = false; }
   };
 
@@ -349,7 +372,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
     const card = btn.closest('.item');
     btn.disabled = true;
     const r = await api({ action: 'bankDeposit', amount: card.querySelector('.f-depAmt').value, reference: card.querySelector('.f-depRef').value });
-    if (r.ok) { lockbox = r.lockbox; renderCash(); msg($('cashMsg'), 'ok', 'Deposit recorded — lockbox balance ₹' + r.lockbox + '.'); }
+    if (r.ok) { lockbox = r.lockbox; cashMeta = r.meta || cashMeta; renderCash(); msg($('cashMsg'), 'ok', 'Deposit recorded — lockbox balance ₹' + r.lockbox + '.'); }
     else { msg($('cashMsg'), 'error', r.error); btn.disabled = false; }
   };
 
