@@ -152,6 +152,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
       <!-- ENTER MODE -->
       <div id="enterPane">
         <button class="btn leaf" id="startDayBtn" style="display:none">Start today's stock day</button>
+        <button class="btn quiet" id="importUsageBtn">Import POS usage</button>
 
         <details class="purchase" id="purchDetails">
           <summary>+ Record a purchase / delivery</summary>
@@ -268,10 +269,11 @@ details.batch > summary::-webkit-details-marker { display: none; }
 
   const CASH_DENOMS = [500, 200, 100, 50, 20, 10, 5, 2, 1];
   let cash = {};
+  let lockbox = 0;
 
   async function loadCash() {
     const r = await api({ action: 'cashToday' });
-    if (r.ok) { cash = r.cash || {}; renderCash(); }
+    if (r.ok) { cash = r.cash || {}; lockbox = r.lockbox || 0; renderCash(); }
     else msg($('cashMsg'), 'error', r.error);
   }
 
@@ -297,7 +299,13 @@ details.batch > summary::-webkit-details-marker { display: none; }
         (d && d.enteredBy ? '<div class="hint">Entered by ' + d.enteredBy + '</div>' : '') +
         '<button class="btn small" onclick="saveCash(\'' + s + '\', this)">Save ' + s.toLowerCase() + ' count</button>' +
         '</div></div>';
-    }).join('');
+    }).join('') +
+      '<div class="item open"><div class="head"><strong>Lockbox</strong><span class="badge">Balance ₹' + lockbox + '</span></div>' +
+      '<div class="body" style="display:block">' +
+      '<div><label>Bank deposit amount (₹)</label><input type="number" min="0" step="1" class="f-depAmt"></div>' +
+      '<label>Deposit reference (slip no / UTR)</label><input class="f-depRef">' +
+      '<button class="btn small" onclick="bankDeposit(this)">Record bank deposit</button>' +
+      '</div></div>';
   }
 
   window.cashTotal = card => {
@@ -322,6 +330,14 @@ details.batch > summary::-webkit-details-marker { display: none; }
       remarks: card.querySelector('.f-cashRemarks').value
     });
     if (r.ok) { cash = r.cash; renderCash(); msg($('cashMsg'), 'ok', session + ' count saved — total ₹' + r.total + '.'); }
+    else { msg($('cashMsg'), 'error', r.error); btn.disabled = false; }
+  };
+
+  window.bankDeposit = async btn => {
+    const card = btn.closest('.item');
+    btn.disabled = true;
+    const r = await api({ action: 'bankDeposit', amount: card.querySelector('.f-depAmt').value, reference: card.querySelector('.f-depRef').value });
+    if (r.ok) { lockbox = r.lockbox; renderCash(); msg($('cashMsg'), 'ok', 'Deposit recorded — lockbox balance ₹' + r.lockbox + '.'); }
     else { msg($('cashMsg'), 'error', r.error); btn.disabled = false; }
   };
 
@@ -464,6 +480,19 @@ details.batch > summary::-webkit-details-marker { display: none; }
     if (r.ok) { rows = r.rows; render(); msg($('mainMsg'),'ok','Day started — ' + r.added + ' items ready.'); }
     else msg($('mainMsg'),'error', r.error);
     $('startDayBtn').disabled = false;
+  });
+
+  $('importUsageBtn').addEventListener('click', async () => {
+    if (!confirm('Before importing: 1) Sync the POS app to cloud. 2) Export today\'s Sale Transactions from the dashboard. 3) Upload the file to the POS Exports Drive folder. All done?')) return;
+    $('importUsageBtn').disabled = true;
+    const r = await api({ action: 'importUsage' });
+    if (r.ok) {
+      let m = 'Usage imported for ' + r.skus + ' items.';
+      if (r.unmapped && r.unmapped.length) m += ' NOT in recipe map (tell Haritha): ' + r.unmapped.join(', ');
+      msg($('mainMsg'), r.unmapped && r.unmapped.length ? 'error' : 'ok', m);
+      const t = await api({ action: 'today' }); if (t.ok) { rows = t.rows; render(); }
+    } else msg($('mainMsg'), 'error', r.error);
+    $('importUsageBtn').disabled = false;
   });
 
   window.saveEntry = async (sku, btn) => {
