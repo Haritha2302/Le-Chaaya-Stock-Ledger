@@ -289,7 +289,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
           '<div><input type="number" min="0" step="1" class="d-' + v + '" value="' + (d ? (d.counts[i] || '') : '') + '" oninput="cashTotal(this.closest(\'.item\'))"></div></div>'
         ).join('') +
         '<div class="facts">Total: ₹<b class="cash-total">' + (d ? d.total : 0) + '</b></div>' +
-        (s === 'Opening' ? '<div class="hint">Opening float should be ₹250.</div>' : '') +
+        (s === 'Opening' ? '<div class="calcline c-openfloat"></div>' : '') +
         (s === 'Closing'
           ? '<div><label>Moved to lockbox (₹)</label><input type="number" min="0" step="1" class="f-moved" value="' + (d ? (d.moved || '') : '') + '" oninput="cashTotal(this.closest(\'.item\'))"></div>' +
             '<div class="calcline c-float"></div>'
@@ -306,6 +306,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
       '<label>Deposit reference (slip no / UTR)</label><input class="f-depRef">' +
       '<button class="btn small" onclick="bankDeposit(this)">Record bank deposit</button>' +
       '</div></div>';
+    document.querySelectorAll('#cashList .item').forEach(cashTotal);
   }
 
   window.cashTotal = card => {
@@ -317,6 +318,11 @@ details.batch > summary::-webkit-details-marker { display: none; }
       const fl = card.querySelector('.c-float');
       fl.textContent = 'Till after move: ₹' + after + (after === 250 ? ' ✓' : ' — should be ₹250');
       fl.className = 'calcline c-float' + (after === 250 ? '' : ' bad');
+    }
+  const of = card.querySelector('.c-openfloat');
+    if (of) {
+      of.textContent = t === 250 ? 'Opening float ₹250 ✓' : 'Opening float should be ₹250 — counted ₹' + t;
+      of.className = 'calcline c-openfloat' + (t === 250 ? '' : ' bad');
     }
   };
 
