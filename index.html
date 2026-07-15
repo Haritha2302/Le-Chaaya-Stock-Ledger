@@ -329,6 +329,11 @@ details.batch > summary::-webkit-details-marker { display: none; }
 
   window.saveCash = async (session, btn) => {
     const card = btn.closest('.item');
+    if (session === 'Opening') {
+      const t = Number(card.querySelector('.cash-total').textContent) || 0;
+      if (t !== 250 && !confirm('Opening float is ₹' + t + ' — that\'s ₹' + (t - 250) +
+          ' off the ₹250 float. Note the reason in remarks. Save anyway?')) return;
+    }
     btn.disabled = true;
     const r = await api({
       action: 'saveCash', session: session,
