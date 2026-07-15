@@ -200,6 +200,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
 
         <div id="entryList"></div>
         <button class="btn leaf" id="confirmOpeningBtn" style="display:none">Confirm opening counts — start selling</button>
+        <button class="btn leaf" id="confirmClosingBtn" style="display:none">Confirm closing — end the stock day</button>
       </div>
 
       <!-- REVIEW MODE -->
@@ -451,6 +452,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
   function render() {
     $('startDayBtn').style.display = rows.length === 0 ? 'block' : 'none';
     $('confirmOpeningBtn').style.display = (rows.length > 0 && phase === 'MORNING') ? 'block' : 'none';
+    $('confirmClosingBtn').style.display = (rows.length > 0 && phase === 'DAY') ? 'block' : 'none';
     $('importUsageBtn').style.display = (rows.length > 0 && phase === 'DAY') ? 'block' : 'none';
     renderEntry(); renderReview();
   }
@@ -499,7 +501,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
                 '<div class="wrap-cvr" style="display:none"><label>Remarks — closing variance</label><input class="f-remarks" value="' + (r.remarks || '') + '"></div>' +
                 '<a class="morelink" onclick="this.closest(\'.item\').classList.toggle(\'showmore\')">+ comp/sampling</a>' +
                 '<div class="more-fields"><div><label>Comp/Sampling</label><input type="number" step="any" min="0" class="f-comp" value="' + (r.comp ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div></div>') +
-            '<button class="btn small" onclick="saveEntry(\'' + r.sku + '\', this)">Save ' + r.item + '</button>' +
+            (phase === 'CLOSED' ? '<div class="hint">Day closed — locked.</div>'
+              : '<button class="btn small" onclick="saveEntry(\'' + r.sku + '\', this)">Save ' + r.item + '</button>') +
             '</div></div>';
         }).join('') + '</details>';
     }).join('') || '<div class="hint">No items yet — start the day above.</div>';
@@ -583,6 +586,17 @@ details.batch > summary::-webkit-details-marker { display: none; }
     if (r.ok) { rows = r.rows; phase = r.phase; render(); msg($('mainMsg'), 'ok', 'Opening confirmed — day started.', $('confirmOpeningBtn')); }
     else { msg($('mainMsg'), 'error', r.error, $('confirmOpeningBtn')); }
     $('confirmOpeningBtn').disabled = false;
+  });
+
+  $('confirmClosingBtn').addEventListener('click', async () => {
+    const pending = rows.filter(r => r.countedBy === '').length;
+    const warn = pending ? pending + ' item(s) have no closing entry yet. ' : '';
+    if (!confirm(warn + 'After confirming, today\'s stock entries are locked. Confirm closing?')) return;
+    $('confirmClosingBtn').disabled = true;
+    const r = await api({ action: 'confirmClosing' });
+    if (r.ok) { rows = r.rows; phase = r.phase; render(); msg($('mainMsg'), 'ok', 'Stock day closed.', $('importUsageBtn')); }
+    else { msg($('mainMsg'), 'error', r.error, $('confirmClosingBtn')); }
+    $('confirmClosingBtn').disabled = false;
   });
 
   $('importUsageBtn').addEventListener('click', async () => {
