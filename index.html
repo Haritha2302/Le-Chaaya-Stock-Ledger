@@ -108,6 +108,9 @@ details.batch > summary::-webkit-details-marker { display: none; }
 
 .calcline { font-size: 0.9rem; color: #6f5f4b; margin: 8px 2px 2px; min-height: 1.2em; }
 .calcline.bad { color: var(--ember); font-weight: 600; }
+
+.item.inactive { opacity: 0.55; }
+.item.inactive .head { cursor: pointer; }
   
 </style>
 </head>
@@ -239,8 +242,12 @@ details.batch > summary::-webkit-details-marker { display: none; }
     return res.json();
   }
 
-  function msg(el, kind, text) { el.className = 'msg ' + kind; el.textContent = text;
-    if (kind === 'ok') setTimeout(() => { el.className = 'msg'; }, 3500); }
+  function msg(el, kind, text, nearBtn) {
+    if (nearBtn && nearBtn.parentElement) nearBtn.parentElement.insertBefore(el, nearBtn.nextSibling);
+    el.className = 'msg ' + kind; el.textContent = text;
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (kind === 'ok') setTimeout(() => { el.className = 'msg'; }, 3500);
+  }
 
   // ── LOGIN ──
   $('loginBtn').addEventListener('click', async () => {
@@ -281,9 +288,13 @@ details.batch > summary::-webkit-details-marker { display: none; }
     $('cashList').innerHTML = ['Opening', 'Closing'].map(s => {
       const d = cash[s] || null;
       const locked = (s === 'Opening' && cashMeta.openingLocked) || (s === 'Closing' && cashMeta.closingLocked);
-      const dis = locked ? ' disabled' : '';
-      return '<div class="item open" data-session="' + s + '">' +
-        '<div class="head"><strong>' + s + ' cash count</strong>' +
+      const notYet = (s === 'Closing' && !cashMeta.openingLocked);
+      const dis = (locked || notYet) ? ' disabled' : '';
+      const isActive = !locked && !notYet;
+      return '<div class="item' + (isActive ? ' open' : ' inactive') + '" data-session="' + s + '">' +
+        '<div class="head" onclick="toggle(this)"><strong>' + s + ' cash count</strong>' +
+        '<span class="badge ' + (locked ? 'done' : '') + '">' + (locked ? 'Done ✓' : (notYet ? 'After opening' : 'Pending')) + '</span></div>' +
+        '<div class="body">' +
         '<span class="badge ' + (d ? 'done' : '') + '">' + (d ? 'Entered' : 'Pending') + '</span></div>' +
         '<div class="body" style="display:block">' +
         CASH_DENOMS.map((v, i) =>
@@ -305,8 +316,9 @@ details.batch > summary::-webkit-details-marker { display: none; }
           : '<button class="btn small" onclick="saveCash(\'' + s + '\', this)">Save ' + s.toLowerCase() + ' count</button>') +
         '</div></div>';
     }).join('') +
-      '<div class="item open"><div class="head"><strong>Lockbox</strong><span class="badge">Balance ₹' + lockbox + '</span></div>' +
-      '<div class="body" style="display:block">' +
+      '<div class="item' + ((cashMeta.pending || cashMeta.canInitiate) ? ' open' : ' inactive') + '">' +
+      '<div class="head" onclick="toggle(this)"><strong>Lockbox</strong><span class="badge">Balance ₹' + lockbox + '</span></div>' +
+      '<div class="body">' +
       (cashMeta.pending
         ? '<div class="calcline bad">₹' + cashMeta.pending.amount + ' taken for deposit on ' + cashMeta.pending.date + ' by ' + cashMeta.pending.by + ' — awaiting bank reference.</div>' +
           '<label>Deposit reference (slip no / UTR)</label><input class="f-depRef">' +
@@ -363,14 +375,16 @@ details.batch > summary::-webkit-details-marker { display: none; }
       }
     }
     btn.disabled = true;
-    const r = await api({
-      action: 'saveCash', session: session,
-      counts: CASH_DENOMS.map(v => card.querySelector('.d-' + v).value),
-      moved: (card.querySelector('.f-moved') ? card.querySelector('.f-moved').value : 0),
-      remarks: card.querySelector('.f-cashRemarks').value
-    });
-    if (r.ok) { cash = r.cash; lockbox = r.lockbox ?? lockbox; cashMeta = r.meta || cashMeta; renderCash(); msg($('cashMsg'), 'ok', session + ' count saved — total ₹' + r.total + '.'); }
-    else { msg($('cashMsg'), 'error', r.error); btn.disabled = false; }
+    try {
+      const r = await api({
+        action: 'saveCash', session: session,
+        counts: CASH_DENOMS.map(v => card.querySelector('.d-' + v).value),
+        moved: (card.querySelector('.f-moved') ? card.querySelector('.f-moved').value : 0),
+        remarks: card.querySelector('.f-cashRemarks').value
+      });
+      if (r.ok) { cash = r.cash; lockbox = r.lockbox ?? lockbox; cashMeta = r.meta || cashMeta; renderCash(); msg($('cashMsg'), 'ok', session + ' count saved — total ₹' + r.total + '.'); }
+      else { msg($('cashMsg'), 'error', r.error, btn); btn.disabled = false; }
+    } catch (e) { msg($('cashMsg'), 'error', 'Could not reach the server — count NOT saved.', btn); btn.disabled = false; }
   };
 
   window.initiateDeposit = async btn => {
@@ -381,8 +395,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
     try {
       const r = await api({ action: 'initiateDeposit', amount: amt });
       if (r.ok) { lockbox = r.lockbox; cashMeta = r.meta || cashMeta; renderCash(); msg($('cashMsg'), 'ok', 'Noted — enter the bank reference after depositing.'); }
-      else { msg($('cashMsg'), 'error', r.error); btn.disabled = false; }
-    } catch (e) { msg($('cashMsg'), 'error', 'Could not reach the server.'); btn.disabled = false; }
+      else { msg($('cashMsg'), 'error', r.error, btn); btn.disabled = false; }
+    } catch (e) { msg($('cashMsg'), 'error', 'Could not reach the server.', btn); btn.disabled = false; }
   };
 
   window.clearDeposit = async btn => {
@@ -391,8 +405,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
     try {
       const r = await api({ action: 'clearDeposit', reference: card.querySelector('.f-depRef').value });
       if (r.ok) { lockbox = r.lockbox; cashMeta = r.meta || cashMeta; renderCash(); msg($('cashMsg'), 'ok', 'Deposit confirmed.'); }
-      else { msg($('cashMsg'), 'error', r.error); btn.disabled = false; }
-    } catch (e) { msg($('cashMsg'), 'error', 'Could not reach the server.'); btn.disabled = false; }
+      else { msg($('cashMsg'), 'error', r.error, btn); btn.disabled = false; }
+    } catch (e) { msg($('cashMsg'), 'error', 'Could not reach the server.', btn); btn.disabled = false; }
   };
 
   function syncDocNo() {
