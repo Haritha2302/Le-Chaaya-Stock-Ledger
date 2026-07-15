@@ -571,7 +571,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
   $('startDayBtn').addEventListener('click', async () => {
     $('startDayBtn').disabled = true;
     const r = await api({ action:'startDay' });
-    if (r.ok) { rows = r.rows; phase = r.phase || phase; render(); msg($('mainMsg'),'ok','Day started — ' + r.added + ' items ready., $('startDayBtn')'); }
+    if (r.ok) { rows = r.rows; phase = r.phase || phase; render(); msg($('mainMsg'),'ok','Day started — ' + r.added + ' items ready.', $('startDayBtn')); }
     else msg($('mainMsg'),'error', r.error, $('startDayBtn'));
     $('startDayBtn').disabled = false;
   });
