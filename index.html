@@ -45,6 +45,8 @@
   .msg.ok { display:block; background:#EFF4EC; border:1px solid var(--leaf); }
   .msg.error { display:block; background:#F7ECE8; border:1px solid var(--ember); }
 
+  .btn.attached { background: var(--leaf); color: #fff; border-color: var(--leaf); }
+
   /* mode tabs */
   .tabs { display:flex; gap:8px; margin-bottom:14px; }
   .tabs button {
@@ -160,7 +162,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
             <select id="pItem"></select>
             <div class="row2">
               <div><label>Quantity <span id="pQtyUnit"></span></label><input id="pQty" type="number" inputmode="decimal" min="0" step="any"></div>
-              <div><label>Rate (₹ per unit)</label><input id="pRate" type="number" inputmode="decimal" min="0" step="any"></div>
+              <div><label>Rate (₹ per <span id="pQtyUnit"></span>)</label><input id="pRate" type="number" inputmode="decimal" min="0" step="any"></div>
             </div>
             <label>Supplier</label>
             <input id="pSupplier" placeholder="Vendor name">
@@ -184,7 +186,6 @@ details.batch > summary::-webkit-details-marker { display: none; }
               <input id="pBatch" placeholder="From packet, if printed">
               <label>Bill photo</label>
               <button type="button" class="btn quiet small" id="pPhotoBtn">Take a photo of the bill</button>
-              <span class="hint" id="pPhotoName"></span>
               <input id="pPhotoFile" type="file" accept="image/*" capture="environment" style="display:none">
               <div class="hint">One entry per batch — if a delivery has multiple mfg dates, record each separately with the same doc no.</div>
             </details>
@@ -238,7 +239,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
   function msg(el, kind, text, nearBtn) {
     if (nearBtn && nearBtn.parentElement) nearBtn.parentElement.insertBefore(el, nearBtn.nextSibling);
     el.className = 'msg ' + kind; el.textContent = text;
-    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (nearBtn) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     if (kind === 'ok') setTimeout(() => { el.className = 'msg'; }, 3500);
   }
 
@@ -440,6 +441,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
 
   // ── RENDER ──
   function render() {
+    $('purchDetails').style.display = phase === 'DAY' ? '' : 'none';
     $('startDayBtn').style.display = rows.length === 0 ? 'block' : 'none';
     $('confirmOpeningBtn').style.display = (rows.length > 0 && phase === 'MORNING') ? 'block' : 'none';
     $('confirmClosingBtn').style.display = (rows.length > 0 && phase === 'DAY') ? 'block' : 'none';
@@ -458,11 +460,17 @@ details.batch > summary::-webkit-details-marker { display: none; }
       const group = rows.filter(r => (catBySku[r.sku] || 'Other') === cat);
       if (!group.length) return '';
       const pending = group.filter(r => phase === 'MORNING' ? !(r.openingCount !== '' && r.openingCount != null) : r.countedBy === '').length;
-      const countLabel = phase === 'MORNING' ? (group.length - pending) + ' counted (optional)' : (pending ? pending + ' pending' : 'all entered ✓');
+      const countLabel = phase === 'CLOSED' ? 'final counts'
+        : phase === 'MORNING' ? (group.length - pending) + ' counted (optional)'
+        : (pending ? pending + ' pending' : 'all entered ✓');
       return '<details class="sect" data-cat="' + cat + '">' +
         '<summary class="section-h">' + cat +
         '<span class="sect-count">' + countLabel + '</span></summary>' +
         group.map(r => {
+          if (phase === 'CLOSED') {
+            return '<div class="item"><div class="head"><strong>' + r.item + '</strong>' +
+              '<span class="badge done">' + fmt(r.physical) + ' ' + r.unit + '</span></div></div>';
+          }
           const done = phase === 'MORNING' ? (r.openingCount !== '' && r.openingCount != null) : (r.countedBy !== '');
           return '<div class="item" data-sku="' + r.sku + '" data-open="' + (r.opening || 0) + '" data-purch="' + (r.purchased || 0) + '" data-usage="' + (r.billed || 0) + '" data-oc="' + (r.openingCount !== '' && r.openingCount != null ? r.openingCount : '') + '">' +
             '<div class="head" onclick="toggle(this)"><strong>' + r.item + '</strong>' +
@@ -596,7 +604,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
   $('pPhotoBtn').addEventListener('click', () => $('pPhotoFile').click());
   $('pPhotoFile').addEventListener('change', async e => {
     photoB64 = e.target.files[0] ? await shrink(e.target.files[0]) : '';
-    $('pPhotoName').textContent = photoB64 ? '✓ Photo attached' : '';
+    $('pPhotoBtn').textContent = photoB64 ? '✓ Photo attached — tap to retake' : 'Take a photo of the bill';
+    $('pPhotoBtn').classList.toggle('attached', !!photoB64);
   });
 
   $('pSave').addEventListener('click', async () => {
@@ -612,10 +621,12 @@ details.batch > summary::-webkit-details-marker { display: none; }
       photoBase64: photoB64
     });
     if (r.ok) {
-      msg($('pMsg'),'ok','Recorded: ' + r.qty + ' × ' + r.item + ' · Doc no: ' + r.docNo);
+      $('purchDetails').open = false;
+      msg($('mainMsg'),'ok','Recorded: ' + r.qty + ' × ' + r.item + ' · Doc no: ' + r.docNo, $('purchDetails'));
       ['pQty','pRate','pSupplier','pBatch','pMfg','pExp','pDocNo','pPayRef'].forEach(id => $(id).value = '');
-      photoB64 = ''; $('pPhotoFile').value = ''; $('pPhotoName').textContent = '';
-      const t = await api({ action:'today' }); if (t.ok) { rows = t.rows; render(); }
+      photoB64 = ''; $('pPhotoFile').value = '';
+      $('pPhotoBtn').textContent = 'Take a photo of the bill'; $('pPhotoBtn').classList.remove('attached');
+      if (r.rows) { rows = r.rows; phase = r.phase || phase; render(); }
     } else msg($('pMsg'),'error', r.error);
     $('pSave').disabled = false;
   });
