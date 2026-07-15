@@ -161,8 +161,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
             <label>Item</label>
             <select id="pItem"></select>
             <div class="row2">
-              <div><label>Quantity <span id="pQtyUnit"></span></label><input id="pQty" type="number" inputmode="decimal" min="0" step="any"></div>
-              <div><label>Rate (₹ per <span id="pQtyUnit"></span>)</label><input id="pRate" type="number" inputmode="decimal" min="0" step="any"></div>
+              <div><label>Quantity (<span class="pUnit"></span>)</label><input id="pQty" type="number" inputmode="decimal" min="0" step="any"></div>
+              <div><label>Rate (₹ per <span class="pUnit"></span>)</label><input id="pRate" type="number" inputmode="decimal" min="0" step="any"></div>
             </div>
             <label>Supplier</label>
             <input id="pSupplier" placeholder="Vendor name">
@@ -218,11 +218,17 @@ details.batch > summary::-webkit-details-marker { display: none; }
 
   let photoB64 = '';
   async function shrink(file) {
-    const img = await createImageBitmap(file);
-    const s = Math.min(1, 1400 / Math.max(img.width, img.height));
+    const MAX = 1400;
+    let bmp;
+    try {
+      bmp = await createImageBitmap(file, { resizeWidth: MAX, resizeHeight: MAX, resizeQuality: 'medium' });
+    } catch (e) {
+      bmp = await createImageBitmap(file); // fallback: options unsupported
+    }
+    const s = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
     const c = document.createElement('canvas');
-    c.width = img.width * s; c.height = img.height * s;
-    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
     return c.toDataURL('image/jpeg', 0.8).split(',')[1];
   }
   
@@ -417,7 +423,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
 
   function syncQtyUnit() {
     const it = boot && boot.items.find(i => i.sku === $('pItem').value);
-    $('pQtyUnit').textContent = it ? '(' + it.unit + ')' : '';
+    document.querySelectorAll('.pUnit').forEach(el => el.textContent = it ? it.unit : '—');
   }
   $('pItem').addEventListener('change', syncQtyUnit);
 
@@ -603,9 +609,19 @@ details.batch > summary::-webkit-details-marker { display: none; }
 
   $('pPhotoBtn').addEventListener('click', () => $('pPhotoFile').click());
   $('pPhotoFile').addEventListener('change', async e => {
-    photoB64 = e.target.files[0] ? await shrink(e.target.files[0]) : '';
-    $('pPhotoBtn').textContent = photoB64 ? '✓ Photo attached — tap to retake' : 'Take a photo of the bill';
-    $('pPhotoBtn').classList.toggle('attached', !!photoB64);
+    if (!e.target.files[0]) { photoB64 = ''; return; }
+    $('pPhotoBtn').textContent = 'Processing photo…';
+    $('pPhotoBtn').disabled = true;
+    try {
+      photoB64 = await shrink(e.target.files[0]);
+      $('pPhotoBtn').textContent = '✓ Photo attached — tap to retake';
+      $('pPhotoBtn').classList.add('attached');
+    } catch (err) {
+      photoB64 = '';
+      $('pPhotoBtn').textContent = 'Photo failed — tap to retry';
+      $('pPhotoBtn').classList.remove('attached');
+    }
+    $('pPhotoBtn').disabled = false;
   });
 
   $('pSave').addEventListener('click', async () => {
