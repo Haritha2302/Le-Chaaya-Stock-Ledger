@@ -444,14 +444,13 @@ details.batch > summary::-webkit-details-marker { display: none; }
           ' · Purchased ' + fmt(r.purchased) +
           '' +
           ' · Wastage ' + fmt(r.wastage) + (r.wastageReason ? ' (' + r.wastageReason + ')' : '') +
-          ' · Staff excess ' + fmt(r.staffExcess) +
+           '' +
           ' · Comp ' + fmt(r.comp) +
           '<br>Counted <b>' + fmt(r.physical) + '</b> · Usage today <b>' + fmt(r.usage) + '</b>' +
           (r.remarks ? '<br>Remarks: ' + r.remarks : '') +
           (counted ? '<br>Entered by ' + r.countedBy : '') +
           (verified ? ' · Verified by ' + r.verifiedBy : '') +
         '</div>' +
-        '' + +
         '</div></div>';
     }).join('') || '<div class="hint">Nothing to review yet.</div>';
   }
