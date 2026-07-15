@@ -294,7 +294,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
         (s === 'Opening' ? '<div class="calcline c-openfloat"></div>' : '') +
         (s === 'Closing'
           ? '<div class="calcline c-closevar"></div>' +
-            '<div><label>Moved to lockbox (₹)</label><input type="number" min="0" step="1" class="f-moved" value="' + (d ? (d.moved || '') : '') + '"' + dis + ' oninput="cashTotal(this.closest(\'.item\'))"></div>' +
+            '<div><label>Moved to lockbox (₹)</label><input type="number" min="0" step="1" class="f-moved" value="' + (d ? (d.moved || '') : '') + '"' + (dis || (cashMeta.pending ? ' disabled' : '')) + ' oninput="cashTotal(this.closest(\'.item\'))"></div>' +
             '<div class="calcline c-float"></div>'
           : '') +
         '<label>Remarks (refunds, cash taken out, etc.)</label>' +
@@ -307,9 +307,14 @@ details.batch > summary::-webkit-details-marker { display: none; }
     }).join('') +
       '<div class="item open"><div class="head"><strong>Lockbox</strong><span class="badge">Balance ₹' + lockbox + '</span></div>' +
       '<div class="body" style="display:block">' +
-      '<div><label>Bank deposit amount (₹)</label><input type="number" min="0" step="1" class="f-depAmt"></div>' +
-      '<label>Deposit reference (slip no / UTR)</label><input class="f-depRef">' +
-      '<button class="btn small" onclick="bankDeposit(this)">Record bank deposit</button>' +
+      (cashMeta.pending
+        ? '<div class="calcline bad">₹' + cashMeta.pending.amount + ' taken for deposit on ' + cashMeta.pending.date + ' by ' + cashMeta.pending.by + ' — awaiting bank reference.</div>' +
+          '<label>Deposit reference (slip no / UTR)</label><input class="f-depRef">' +
+          '<button class="btn small leaf" onclick="clearDeposit(this)">Confirm deposit done</button>'
+        : (cashMeta.canInitiate
+            ? '<div><label>Take cash for bank deposit (₹)</label><input type="number" min="0" step="1" class="f-depAmt"></div>' +
+              '<button class="btn small" onclick="initiateDeposit(this)">Take for deposit</button>'
+            : '<div class="hint">Deposits can be taken in the morning, before closing is recorded.</div>')) +
       '</div></div>';
     document.querySelectorAll('#cashList .item').forEach(cashTotal);
   }
@@ -368,12 +373,26 @@ details.batch > summary::-webkit-details-marker { display: none; }
     else { msg($('cashMsg'), 'error', r.error); btn.disabled = false; }
   };
 
-  window.bankDeposit = async btn => {
+  window.initiateDeposit = async btn => {
+    const card = btn.closest('.item');
+    const amt = card.querySelector('.f-depAmt').value;
+    if (!confirm('Taking ₹' + amt + ' from the lockbox for bank deposit. Enter the bank reference here after depositing. Proceed?')) return;
+    btn.disabled = true;
+    try {
+      const r = await api({ action: 'initiateDeposit', amount: amt });
+      if (r.ok) { lockbox = r.lockbox; cashMeta = r.meta || cashMeta; renderCash(); msg($('cashMsg'), 'ok', 'Noted — enter the bank reference after depositing.'); }
+      else { msg($('cashMsg'), 'error', r.error); btn.disabled = false; }
+    } catch (e) { msg($('cashMsg'), 'error', 'Could not reach the server.'); btn.disabled = false; }
+  };
+
+  window.clearDeposit = async btn => {
     const card = btn.closest('.item');
     btn.disabled = true;
-    const r = await api({ action: 'bankDeposit', amount: card.querySelector('.f-depAmt').value, reference: card.querySelector('.f-depRef').value });
-    if (r.ok) { lockbox = r.lockbox; cashMeta = r.meta || cashMeta; renderCash(); msg($('cashMsg'), 'ok', 'Deposit recorded — lockbox balance ₹' + r.lockbox + '.'); }
-    else { msg($('cashMsg'), 'error', r.error); btn.disabled = false; }
+    try {
+      const r = await api({ action: 'clearDeposit', reference: card.querySelector('.f-depRef').value });
+      if (r.ok) { lockbox = r.lockbox; cashMeta = r.meta || cashMeta; renderCash(); msg($('cashMsg'), 'ok', 'Deposit confirmed.'); }
+      else { msg($('cashMsg'), 'error', r.error); btn.disabled = false; }
+    } catch (e) { msg($('cashMsg'), 'error', 'Could not reach the server.'); btn.disabled = false; }
   };
 
   function syncDocNo() {
