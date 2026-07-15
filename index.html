@@ -155,17 +155,15 @@ details.batch > summary::-webkit-details-marker { display: none; }
       <!-- ENTER MODE -->
       <div id="enterPane">
         <button class="btn leaf" id="startDayBtn" style="display:none">Start today's stock day</button>
-        <button class="btn leaf" id="confirmOpeningBtn" style="display:none">Confirm opening counts — start selling</button>
-        <button class="btn quiet" id="importUsageBtn">Import POS usage</button>
-        <button class="btn quiet" id="importUsageBtn">Import POS usage</button>
-
+        <button class="btn quiet" id="importUsageBtn" style="display:none">Import POS usage</button>
+        
         <details class="purchase" id="purchDetails">
           <summary>+ Record a purchase / delivery</summary>
           <div class="card" style="margin-top:10px">
             <label>Item</label>
             <select id="pItem"></select>
             <div class="row2">
-              <div><label>Quantity</label><input id="pQty" type="number" inputmode="decimal" min="0" step="any"></div>
+              <div><label>Quantity <span id="pQtyUnit"></span></label><input id="pQty" type="number" inputmode="decimal" min="0" step="any"></div>
               <div><label>Rate (₹ per unit)</label><input id="pRate" type="number" inputmode="decimal" min="0" step="any"></div>
             </div>
             <label>Supplier</label>
@@ -201,6 +199,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
         </details>
 
         <div id="entryList"></div>
+        <button class="btn leaf" id="confirmOpeningBtn" style="display:none">Confirm opening counts — start selling</button>
       </div>
 
       <!-- REVIEW MODE -->
@@ -424,11 +423,18 @@ details.batch > summary::-webkit-details-marker { display: none; }
   }
   $('pDocType').addEventListener('change', syncDocNo);
 
+  function syncQtyUnit() {
+    const it = boot && boot.items.find(i => i.sku === $('pItem').value);
+    $('pQtyUnit').textContent = it ? '(' + it.unit + ')' : '';
+  }
+  $('pItem').addEventListener('change', syncQtyUnit);
+
   async function loadAll() {
     const b = await api({ action:'bootstrap' });
     if (!b.ok) { msg($('mainMsg'),'error', b.error); return; }
     boot = b;
     fillSelect($('pItem'), b.items.map(i => ({ v:i.sku, t:i.name + ' (' + i.unit + ')' })));
+     syncQtyUnit();
     fillSelect($('pDocType'), b.docTypes.map(v => ({ v:v, t:v })));
     syncDocNo();
     fillSelect($('pPayStatus'), b.paymentStatus.map(v => ({ v:v, t:v })));
@@ -519,8 +525,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
     }
     const expEl = card.querySelector('.c-exp');
     if (expEl) {
-      const oc = Number(card.dataset.oc);
-      const base = isNaN(oc) ? base0 : oc;
+      const ocs = String(card.dataset.oc || '');
+      const base = ocs === '' ? base0 : Number(ocs);
       const wast = v('f-wastage') || 0, comp = v('f-comp') || 0, cc = v('f-physicalClosing');
       const expected = r2(base + purch - usage - wast - comp);
       expEl.textContent = 'Expected closing: ' + expected;
@@ -565,17 +571,17 @@ details.batch > summary::-webkit-details-marker { display: none; }
   $('startDayBtn').addEventListener('click', async () => {
     $('startDayBtn').disabled = true;
     const r = await api({ action:'startDay' });
-    if (r.ok) { rows = r.rows; phase = r.phase || phase; render(); msg($('mainMsg'),'ok','Day started — ' + r.added + ' items ready.'); }
-    else msg($('mainMsg'),'error', r.error);
+    if (r.ok) { rows = r.rows; phase = r.phase || phase; render(); msg($('mainMsg'),'ok','Day started — ' + r.added + ' items ready., $('startDayBtn')'); }
+    else msg($('mainMsg'),'error', r.error, $('startDayBtn'));
     $('startDayBtn').disabled = false;
   });
 
   $('confirmOpeningBtn').addEventListener('click', async () => {
-    if (!confirm('After confirming, opening counts are locked for the day and cannot be changed. Confirm?')) return;
+    if (!confirm('Save each item\'s opening count first - unsaved values are lost. After confirming, opening counts are locked for the day. Confirm?')) return;
     $('confirmOpeningBtn').disabled = true;
     const r = await api({ action: 'confirmOpening' });
-    if (r.ok) { rows = r.rows; phase = r.phase; render(); msg($('mainMsg'), 'ok', 'Opening confirmed — day started.'); }
-    else { msg($('mainMsg'), 'error', r.error); }
+    if (r.ok) { rows = r.rows; phase = r.phase; render(); msg($('mainMsg'), 'ok', 'Opening confirmed — day started.', $('confirmOpeningBtn')); }
+    else { msg($('mainMsg'), 'error', r.error, $('confirmOpeningBtn')); }
     $('confirmOpeningBtn').disabled = false;
   });
 
@@ -590,7 +596,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
       if (r.unmapped && r.unmapped.length) m += ' NOT in recipe map (tell Haritha): ' + r.unmapped.join(', ');
       msg($('mainMsg'), r.unmapped && r.unmapped.length ? 'error' : 'ok', m);
       const t = await api({ action: 'today' }); if (t.ok) { rows = t.rows; render(); }
-    } else msg($('mainMsg'), 'error', r.error);
+    } else msg($('mainMsg'), 'error', r.error, $('importUsageBtn'));
     $('importUsageBtn').disabled = false;
     $('importUsageBtn').textContent = oldLabel;
   });
