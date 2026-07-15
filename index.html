@@ -556,6 +556,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
   $('importUsageBtn').addEventListener('click', async () => {
     if (!confirm('Before importing: 1) Sync the POS app to cloud. 2) Export today\'s Sale Transactions from the dashboard. 3) Upload the file to the POS Exports Drive folder. All done?')) return;
     $('importUsageBtn').disabled = true;
+    const oldLabel = $('importUsageBtn').textContent;
+    $('importUsageBtn').textContent = 'Importing… please wait';
     const r = await api({ action: 'importUsage' });
     if (r.ok) {
       let m = 'Usage imported for ' + r.skus + ' items.';
@@ -564,6 +566,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
       const t = await api({ action: 'today' }); if (t.ok) { rows = t.rows; render(); }
     } else msg($('mainMsg'), 'error', r.error);
     $('importUsageBtn').disabled = false;
+    $('importUsageBtn').textContent = oldLabel;
   });
 
   window.saveEntry = async (sku, btn) => {
