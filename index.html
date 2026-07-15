@@ -310,6 +310,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
   }
 
   window.cashTotal = card => {
+    if (!card.querySelector('.d-' + CASH_DENOMS[0])) return;  // not a denomination card (e.g. Lockbox)
     const t = CASH_DENOMS.reduce((s, v) => s + v * (Number(card.querySelector('.d-' + v).value) || 0), 0);
     card.querySelector('.cash-total').textContent = t;
     const mEl = card.querySelector('.f-moved');
