@@ -155,6 +155,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
       <!-- ENTER MODE -->
       <div id="enterPane">
         <button class="btn leaf" id="startDayBtn" style="display:none">Start today's stock day</button>
+        <button class="btn leaf" id="confirmOpeningBtn" style="display:none">Confirm opening counts — start selling</button>
+        <button class="btn quiet" id="importUsageBtn">Import POS usage</button>
         <button class="btn quiet" id="importUsageBtn">Import POS usage</button>
 
         <details class="purchase" id="purchDetails">
@@ -219,6 +221,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
   let boot = null;       // items + dropdown lists
   let rows = [];         // today's rows
   let lastSavedSku = null;
+  let phase = 'MORNING';
   
   const $ = id => document.getElementById(id);
 
@@ -430,7 +433,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
     syncDocNo();
     fillSelect($('pPayStatus'), b.paymentStatus.map(v => ({ v:v, t:v })));
     const t = await api({ action:'today' });
-    rows = t.ok ? t.rows : [];
+    rows = t.ok ? t.rows : []; if (t.ok && t.phase) phase = t.phase;
     render();
   }
 
@@ -441,6 +444,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
   // ── RENDER ──
   function render() {
     $('startDayBtn').style.display = rows.length === 0 ? 'block' : 'none';
+    $('confirmOpeningBtn').style.display = (rows.length > 0 && phase === 'MORNING') ? 'block' : 'none';
+    $('importUsageBtn').style.display = (rows.length > 0 && phase === 'DAY') ? 'block' : 'none';
     renderEntry(); renderReview();
   }
 
@@ -459,32 +464,35 @@ details.batch > summary::-webkit-details-marker { display: none; }
     $('entryList').innerHTML = order.map(cat => {
       const group = rows.filter(r => (catBySku[r.sku] || 'Other') === cat);
       if (!group.length) return '';
-      const pending = group.filter(r => r.countedBy === '').length;
+      const pending = group.filter(r => phase === 'MORNING' ? !(r.openingCount !== '' && r.openingCount != null) : r.countedBy === '').length;
+      const countLabel = phase === 'MORNING' ? (group.length - pending) + ' counted (optional)' : (pending ? pending + ' pending' : 'all entered ✓');
       return '<details class="sect" data-cat="' + cat + '">' +
         '<summary class="section-h">' + cat +
-        '<span class="sect-count">' + (pending ? pending + ' pending' : 'all entered ✓') + '</span></summary>' +
+        '<span class="sect-count">' + countLabel + '</span></summary>' +
         group.map(r => {
-          const done = r.countedBy !== '';
-          return '<div class="item" data-sku="' + r.sku + '" data-open="' + (r.opening || 0) + '" data-purch="' + (r.purchased || 0) + '" data-usage="' + (r.billed || 0) + '">' +
+          const done = phase === 'MORNING' ? (r.openingCount !== '' && r.openingCount != null) : (r.countedBy !== '');
+          return '<div class="item" data-sku="' + r.sku + '" data-open="' + (r.opening || 0) + '" data-purch="' + (r.purchased || 0) + '" data-usage="' + (r.billed || 0) + '" data-oc="' + (r.openingCount !== '' && r.openingCount != null ? r.openingCount : '') + '">' +
             '<div class="head" onclick="toggle(this)"><strong>' + r.item + '</strong>' +
             '<span class="badge ' + (done ? 'done' : '') + '">' + (done ? 'Entered' : 'Pending') + '</span></div>' +
             '<div class="body">' +
-            '<div class="facts">Yesterday\'s closing: <b>' + fmt(r.opening) + ' ' + r.unit + '</b> · Purchased today: <b>' + fmt(r.purchased) + '</b> · Usage (POS): <b>' + fmt(r.billed) + '</b></div>' +
-            '<div><label>Opening count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-openingCount" value="' + (r.openingCount ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>' +
-            '<div class="calcline c-ov"></div>' +
-            '<div class="wrap-ovr" style="display:none"><label>Remarks — opening variance</label><input class="f-openingRemarks" value="' + (r.openingRemarks || '') + '"></div>' +
-            '<div class="row2">' +
-              '<div><label>Wastage</label><input type="number" step="any" min="0" class="f-wastage" value="' + (r.wastage ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>' +
-              '<div><label>Reason</label><select class="f-wastageReason"><option value=""></option>' +
-                boot.wastageReasons.map(w => '<option' + (r.wastageReason === w ? ' selected' : '') + '>' + w + '</option>').join('') +
-              '</select></div>' +
-            '</div>' +
-            '<div class="calcline c-exp"></div>' +
-            '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>' +
-            '<div class="calcline c-cv"></div>' +
-            '<div class="wrap-cvr" style="display:none"><label>Remarks — closing variance</label><input class="f-remarks" value="' + (r.remarks || '') + '"></div>' +
-            '<a class="morelink" onclick="this.closest(\'.item\').classList.toggle(\'showmore\')">+ comp/sampling</a>' +
-            '<div class="more-fields"><div><label>Comp/Sampling</label><input type="number" step="any" min="0" class="f-comp" value="' + (r.comp ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div></div>' +
+            (phase === 'MORNING'
+              ? '<div class="facts">Yesterday\'s closing: <b>' + fmt(r.opening) + ' ' + r.unit + '</b></div>' +
+                '<div><label>Opening count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-openingCount" value="' + (r.openingCount ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>' +
+                '<div class="calcline c-ov"></div>' +
+                '<div class="wrap-ovr" style="display:none"><label>Remarks — opening variance</label><input class="f-openingRemarks" value="' + (r.openingRemarks || '') + '"></div>'
+              : '<div class="facts">Opening: <b>' + fmt(r.openingCount !== '' && r.openingCount != null ? r.openingCount : r.opening) + ' ' + r.unit + '</b>' + (r.openingCount !== '' && r.openingCount != null ? ' (counted)' : ' (carried)') + ' · Purchased: <b>' + fmt(r.purchased) + '</b> · Usage (POS): <b>' + fmt(r.billed) + '</b></div>' +
+                '<div class="row2">' +
+                  '<div><label>Wastage</label><input type="number" step="any" min="0" class="f-wastage" value="' + (r.wastage ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>' +
+                  '<div><label>Reason</label><select class="f-wastageReason"><option value=""></option>' +
+                    boot.wastageReasons.map(w => '<option' + (r.wastageReason === w ? ' selected' : '') + '>' + w + '</option>').join('') +
+                  '</select></div>' +
+                '</div>' +
+                '<div class="calcline c-exp"></div>' +
+                '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>' +
+                '<div class="calcline c-cv"></div>' +
+                '<div class="wrap-cvr" style="display:none"><label>Remarks — closing variance</label><input class="f-remarks" value="' + (r.remarks || '') + '"></div>' +
+                '<a class="morelink" onclick="this.closest(\'.item\').classList.toggle(\'showmore\')">+ comp/sampling</a>' +
+                '<div class="more-fields"><div><label>Comp/Sampling</label><input type="number" step="any" min="0" class="f-comp" value="' + (r.comp ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div></div>') +
             '<button class="btn small" onclick="saveEntry(\'' + r.sku + '\', this)">Save ' + r.item + '</button>' +
             '</div></div>';
         }).join('') + '</details>';
@@ -501,17 +509,26 @@ details.batch > summary::-webkit-details-marker { display: none; }
     const v = cls => { const el = card.querySelector('.' + cls); return el && el.value !== '' ? Number(el.value) : null; };
     const base0 = Number(card.dataset.open) || 0, purch = Number(card.dataset.purch) || 0, usage = Number(card.dataset.usage) || 0;
     const r2 = n => Math.round(n * 100) / 100;
-    const oc = v('f-openingCount'), wast = v('f-wastage') || 0, comp = v('f-comp') || 0, cc = v('f-physicalClosing');
-    const ov = oc == null ? null : r2(oc - base0);
-    card.querySelector('.c-ov').textContent = ov == null ? '' : 'Overnight variance: ' + ov;
-    card.querySelector('.c-ov').className = 'calcline c-ov' + (ov ? ' bad' : '');
-    card.querySelector('.wrap-ovr').style.display = ov ? 'block' : 'none';
-    const expected = r2((oc == null ? base0 : oc) + purch - usage - wast - comp);
-    card.querySelector('.c-exp').textContent = 'Expected closing: ' + expected;
-    const cv = cc == null ? null : r2(cc - expected);
-    card.querySelector('.c-cv').textContent = cv == null ? '' : 'Closing variance: ' + cv;
-    card.querySelector('.c-cv').className = 'calcline c-cv' + (cv ? ' bad' : '');
-    card.querySelector('.wrap-cvr').style.display = cv ? 'block' : 'none';
+    const ovEl = card.querySelector('.c-ov');
+    if (ovEl) {
+      const oc = v('f-openingCount');
+      const ov = oc == null ? null : r2(oc - base0);
+      ovEl.textContent = ov == null ? '' : 'Overnight variance: ' + ov;
+      ovEl.className = 'calcline c-ov' + (ov ? ' bad' : '');
+      card.querySelector('.wrap-ovr').style.display = ov ? 'block' : 'none';
+    }
+    const expEl = card.querySelector('.c-exp');
+    if (expEl) {
+      const oc = Number(card.dataset.oc);
+      const base = isNaN(oc) ? base0 : oc;
+      const wast = v('f-wastage') || 0, comp = v('f-comp') || 0, cc = v('f-physicalClosing');
+      const expected = r2(base + purch - usage - wast - comp);
+      expEl.textContent = 'Expected closing: ' + expected;
+      const cv = cc == null ? null : r2(cc - expected);
+      card.querySelector('.c-cv').textContent = cv == null ? '' : 'Closing variance: ' + cv;
+      card.querySelector('.c-cv').className = 'calcline c-cv' + (cv ? ' bad' : '');
+      card.querySelector('.wrap-cvr').style.display = cv ? 'block' : 'none';
+    }
   };
 
   function renderReview() {
@@ -548,9 +565,18 @@ details.batch > summary::-webkit-details-marker { display: none; }
   $('startDayBtn').addEventListener('click', async () => {
     $('startDayBtn').disabled = true;
     const r = await api({ action:'startDay' });
-    if (r.ok) { rows = r.rows; render(); msg($('mainMsg'),'ok','Day started — ' + r.added + ' items ready.'); }
+    if (r.ok) { rows = r.rows; phase = r.phase || phase; render(); msg($('mainMsg'),'ok','Day started — ' + r.added + ' items ready.'); }
     else msg($('mainMsg'),'error', r.error);
     $('startDayBtn').disabled = false;
+  });
+
+  $('confirmOpeningBtn').addEventListener('click', async () => {
+    if (!confirm('After confirming, opening counts are locked for the day and cannot be changed. Confirm?')) return;
+    $('confirmOpeningBtn').disabled = true;
+    const r = await api({ action: 'confirmOpening' });
+    if (r.ok) { rows = r.rows; phase = r.phase; render(); msg($('mainMsg'), 'ok', 'Opening confirmed — day started.'); }
+    else { msg($('mainMsg'), 'error', r.error); }
+    $('confirmOpeningBtn').disabled = false;
   });
 
   $('importUsageBtn').addEventListener('click', async () => {
@@ -571,7 +597,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
 
   window.saveEntry = async (sku, btn) => {
     const card = btn.closest('.item');
-    const g = cls => card.querySelector('.' + cls).value;
+    const g = cls => { const el = card.querySelector('.' + cls); return el ? el.value : ''; };
     btn.disabled = true;
     const r = await api({
       action:'saveEntry', sku:sku,
@@ -581,7 +607,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
       staffExcess:'', comp:g('f-comp'),
       physicalClosing:g('f-physicalClosing'), remarks:g('f-remarks')
     });
-    if (r.ok) { lastSavedSku = sku; rows = r.rows; render(); msg($('mainMsg'),'ok','Saved.'); }
+    if (r.ok) { lastSavedSku = sku; rows = r.rows; phase = r.phase || phase; render(); msg($('mainMsg'),'ok','Saved.'); }
     else { msg($('mainMsg'),'error', r.error); btn.disabled = false; }
   };
 
