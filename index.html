@@ -481,6 +481,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
     const order = ['F&B', 'Supplies', 'Other'];
     $('entryList').innerHTML = order.map(cat => {
       const group = rows.filter(r => (catBySku[r.sku] || 'Other') === cat);
+      group.sort((a, b) => (b.countToday ? 1 : 0) - (a.countToday ? 1 : 0));
       if (!group.length) return '';
       const pending = group.filter(r => phase === 'MORNING' ? !(r.openingCount !== '' && r.openingCount != null) : r.countToday && r.countedBy === '').length;
       const countLabel = phase === 'CLOSED' ? 'final counts'
@@ -544,7 +545,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
     if (expEl) {
       const ocs = String(card.dataset.oc || '');
       const base = ocs === '' ? base0 : Number(ocs);
-      const wast = v('f-wastage') || 0, comp = v('f-comp') || 0, cc = v('f-physicalClosing');
+      const wast = Number(card.dataset.wast) || 0, comp = v('f-comp') || 0, cc = v('f-physicalClosing');
       const expected = r2(base + purch - usage - wast - comp);
       expEl.textContent = 'Expected closing: ' + expected;
       const cv = cc == null ? null : r2(cc - expected);
