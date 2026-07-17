@@ -496,7 +496,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
               '<span class="badge done">' + fmt(r.physical) + ' ' + r.unit + '</span></div></div>';
           }
           const done = phase === 'MORNING' ? (r.openingCount !== '' && r.openingCount != null) : (r.countedBy !== '' || !r.countToday);
-          return '<div class="item" data-sku="' + r.sku + '" data-open="' + (r.opening || 0) + '" data-purch="' + (r.purchased || 0) + '" data-usage="' + (r.billed || 0) + '" data-oc="' + (r.openingCount !== '' && r.openingCount != null ? r.openingCount : '') + '">' +
+          return '<div class="item" data-sku="' + r.sku + '" data-open="' + (r.opening || 0) + '" data-purch="' + (r.purchased || 0) + '" data-usage="' + (r.billed || 0) + '" data-wast="' + (r.wastage || 0) + '" data-oc="' + (r.openingCount !== '' && r.openingCount != null ? r.openingCount : '') + '">' +
             '<div class="head" onclick="toggle(this)"><strong>' + r.item + '</strong>' +
             '<span class="badge ' + (done ? 'done' : '') + '">' + (done ? 'Entered' : 'Pending') + '</span></div>' +
             '<div class="body">' +
