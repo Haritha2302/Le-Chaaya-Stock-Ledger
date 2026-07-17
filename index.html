@@ -465,7 +465,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
     $('entryList').innerHTML = order.map(cat => {
       const group = rows.filter(r => (catBySku[r.sku] || 'Other') === cat);
       if (!group.length) return '';
-      const pending = group.filter(r => phase === 'MORNING' ? !(r.openingCount !== '' && r.openingCount != null) : r.countedBy === '').length;
+      const pending = group.filter(r => phase === 'MORNING' ? !(r.openingCount !== '' && r.openingCount != null) : r.countToday && r.countedBy === '').length;
       const countLabel = phase === 'CLOSED' ? 'final counts'
         : phase === 'MORNING' ? (group.length - pending) + ' counted (optional)'
         : (pending ? pending + ' pending' : 'all entered ✓');
@@ -477,7 +477,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
             return '<div class="item"><div class="head"><strong>' + r.item + '</strong>' +
               '<span class="badge done">' + fmt(r.physical) + ' ' + r.unit + '</span></div></div>';
           }
-          const done = phase === 'MORNING' ? (r.openingCount !== '' && r.openingCount != null) : (r.countedBy !== '');
+          const done = phase === 'MORNING' ? (r.openingCount !== '' && r.openingCount != null) : (r.countedBy !== '' || !r.countToday);
           return '<div class="item" data-sku="' + r.sku + '" data-open="' + (r.opening || 0) + '" data-purch="' + (r.purchased || 0) + '" data-usage="' + (r.billed || 0) + '" data-oc="' + (r.openingCount !== '' && r.openingCount != null ? r.openingCount : '') + '">' +
             '<div class="head" onclick="toggle(this)"><strong>' + r.item + '</strong>' +
             '<span class="badge ' + (done ? 'done' : '') + '">' + (done ? 'Entered' : 'Pending') + '</span></div>' +
@@ -495,7 +495,10 @@ details.batch > summary::-webkit-details-marker { display: none; }
                   '</select></div>' +
                 '</div>' +
                 '<div class="calcline c-exp"></div>' +
-                '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>' +
+                (r.countToday
+                  ? '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>'
+                  : '<div class="hint">No count due today — carries forward automatically. Count anyway if something looks off.</div>' +
+                    '<div><label>Closing count — optional (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>') +
                 '<div class="calcline c-cv"></div>' +
                 '<div class="wrap-cvr" style="display:none"><label>Remarks — closing variance</label><input class="f-remarks" value="' + (r.remarks || '') + '"></div>' +
                 '<a class="morelink" onclick="this.closest(\'.item\').classList.toggle(\'showmore\')">+ comp/sampling</a>' +
@@ -561,7 +564,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
   });
 
   $('confirmClosingBtn').addEventListener('click', async () => {
-    const missing = rows.filter(r => r.physical === '' || r.physical == null);
+    const missing = rows.filter(r => r.countToday && (r.physical === '' || r.physical == null));
     if (missing.length) {
       msg($('mainMsg'), 'error', 'Enter and save a closing count for every item first. Missing: ' +
         missing.slice(0, 8).map(m => m.item).join(', ') + (missing.length > 8 ? '…' : ''), $('confirmClosingBtn'));
