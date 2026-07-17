@@ -45,6 +45,11 @@
   .msg.ok { display:block; background:#EFF4EC; border:1px solid var(--leaf); }
   .msg.error { display:block; background:#F7ECE8; border:1px solid var(--ember); }
 
+  .toast { position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:999; max-width:380px; width:calc(100% - 28px); padding:12px 16px; border-radius:10px; font-size:0.92rem; text-align:center; box-shadow:0 4px 14px rgba(62,44,28,0.18); opacity:0; pointer-events:none; transition:opacity .25s ease; }
+  .toast.show { opacity:1; }
+  .toast.ok { background:#EFF4EC; border:1px solid var(--leaf); color:var(--tea); }
+  .toast.error { background:#F7ECE8; border:1px solid var(--ember); color:var(--tea); }
+
   .btn.attached { background: var(--leaf); color: #fff; border-color: var(--leaf); }
 
   /* mode tabs */
@@ -107,6 +112,9 @@ details.sect.notdue { margin: 10px 0 4px; }
 details.sect.notdue > summary { border-bottom: 1px dashed var(--line); padding: 8px 4px; margin: 6px 0 8px; }
 details.sect.notdue > summary .section-h { font-size: 0.78rem; letter-spacing: 0.06em; text-transform: none; font-weight: 500; color: #8b7d66; }
 details.sect.notdue > summary .sect-count { color: #8b7d66; border-color: var(--line); }
+.item.notdue-row .head { align-items: center; gap: 10px; cursor: default; }
+.item.notdue-row .head strong { flex: 1 1 auto; min-width: 0; font-size: 0.95rem; }
+.notdue-btn { flex: 0 0 auto; width: 128px; text-align: center; white-space: nowrap; margin: 0; padding: 10px 8px; font-size: 0.82rem; }
 
 details.batch > summary { list-style: none; cursor: pointer; font-size: 0.85rem; color: var(--gold-deep); text-decoration: underline; padding: 4px 0; }
 details.batch > summary::-webkit-details-marker { display: none; }
@@ -140,14 +148,18 @@ details.batch > summary::-webkit-details-marker { display: none; }
       <div class="topbar"><span id="helloHome"></span><a href="#" onclick="location.reload();return false;">Sign out</a></div>
       <button class="btn" id="goStock">Stock ledger</button>
       <button class="btn" id="goCash">Cash count</button>
+      <button class="btn quiet" id="homeImportBtn" style="display:none">Import POS usage</button>
+      <div class="hint" id="homeImportHint" style="display:none;text-align:center;margin-top:8px"></div>
+      <div class="msg" id="homeMsg"></div>
     </div>
 
     <div id="cashPane" style="display:none">
       <div class="topbar"><a href="#" id="cashHome">← Home</a><a href="#" onclick="location.reload();return false;">Sign out</a></div>
+      <div class="hint" id="cashPosReminder" style="display:none;border:1px solid var(--ember);background:#F7ECE8;border-radius:9px;padding:10px 12px;margin-bottom:14px;color:var(--ember)">Import POS usage from Home before you can save the closing count.</div>
       <div id="cashList"></div>
       <div class="msg" id="cashMsg"></div>
     </div>
-
+    
     <div id="main" style="display:none">
       <div class="topbar">
         <a href="#" id="stockHome">← Home</a>
@@ -158,7 +170,6 @@ details.batch > summary::-webkit-details-marker { display: none; }
       <!-- ENTER MODE -->
       <div id="enterPane">
         <button class="btn leaf" id="startDayBtn" style="display:none">Start today's stock day</button>
-        <button class="btn quiet" id="importUsageBtn" style="display:none">Import POS usage</button>
         
         <details class="purchase" id="purchDetails">
           <summary>+ Record a purchase / delivery</summary>
@@ -214,6 +225,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
           </div>
         </details>
 
+        <div class="hint" id="stockPosReminder" style="display:none;border:1px solid var(--ember);background:#F7ECE8;border-radius:9px;padding:10px 12px;margin-bottom:14px;color:var(--ember)">Import POS usage from Home before you can close today.</div>
         <div id="entryList"></div>
         <button class="btn" id="saveProgressBtn" style="display:none">Save progress</button>
         <button class="btn leaf" id="confirmOpeningBtn" style="display:none">Confirm opening counts — start selling</button>
@@ -233,6 +245,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
   let rows = [];         // today's rows
   let lastSavedSku = null;
   let phase = 'MORNING';
+  let posImported = false;
   
   const $ = id => document.getElementById(id);
 
@@ -269,6 +282,15 @@ details.batch > summary::-webkit-details-marker { display: none; }
     if (kind === 'ok') setTimeout(() => { el.className = 'msg'; }, 3500);
   }
 
+  function toast(kind, text) {
+    let el = document.getElementById('toastMsg');
+    if (!el) { el = document.createElement('div'); el.id = 'toastMsg'; document.body.appendChild(el); }
+    el.className = 'toast ' + kind + ' show';
+    el.textContent = text;
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { el.classList.remove('show'); }, 2600);
+  }
+
   // ── LOGIN ──
   $('loginBtn').addEventListener('click', async () => {
     cred = { empId: $('empId').value.trim().toUpperCase(), pin: $('pin').value };
@@ -291,8 +313,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
 
   $('goStock').addEventListener('click', () => { $('home').style.display = 'none'; $('main').style.display = 'block'; });
   $('goCash').addEventListener('click', async () => { $('home').style.display = 'none'; $('cashPane').style.display = 'block'; await loadCash(); });
-  $('stockHome').addEventListener('click', e => { e.preventDefault(); $('main').style.display = 'none'; $('home').style.display = 'block'; });
-  $('cashHome').addEventListener('click', e => { e.preventDefault(); $('cashPane').style.display = 'none'; $('home').style.display = 'block'; });
+  $('stockHome').addEventListener('click', e => { e.preventDefault(); $('main').style.display = 'none'; $('home').style.display = 'block'; renderHome(); });
+  $('cashHome').addEventListener('click', e => { e.preventDefault(); $('cashPane').style.display = 'none'; $('home').style.display = 'block'; renderHome(); });
 
   const CASH_DENOMS = [500, 200, 100, 50, 20, 10, 5, 2, 1];
   let cash = {};
@@ -305,6 +327,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
   }
 
   function renderCash() {
+    $('cashPosReminder').style.display = (!cashMeta.closingLocked && cashMeta.posCash == null) ? 'block' : 'none';
     $('cashList').innerHTML = ['Opening', 'Closing'].map(s => {
       const d = cash[s] || null;
       const locked = (s === 'Opening' && cashMeta.openingLocked) || (s === 'Closing' && cashMeta.closingLocked);
@@ -467,11 +490,21 @@ details.batch > summary::-webkit-details-marker { display: none; }
     fillSelect($('wReason'), b.wastageReasons.map(v => ({ v:v, t:v })));
     const t = await api({ action:'today' });
     rows = t.ok ? t.rows : []; if (t.ok && t.phase) phase = t.phase;
+    posImported = t.ok ? !!t.posImported : false;
     render();
+    renderHome();
   }
 
   function fillSelect(sel, opts) {
     sel.innerHTML = opts.map(o => '<option value="' + o.v + '">' + o.t + '</option>').join('');
+  }
+
+  function renderHome() {
+    const showImport = phase === 'DAY';
+    $('homeImportBtn').style.display = showImport ? 'block' : 'none';
+    $('homeImportHint').style.display = (showImport && !posImported) ? 'block' : 'none';
+    $('homeImportHint').textContent = 'Import POS usage to close the day.';
+    $('homeImportBtn').textContent = posImported ? 'Re-import POS usage' : 'Import POS usage';
   }
 
   // ── RENDER ──
@@ -482,8 +515,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
     const pendingClosing = rows.filter(r => r.countToday && (r.physical === '' || r.physical == null)).length;
     $('confirmClosingBtn').style.display = (rows.length > 0 && phase === 'DAY' && pendingClosing === 0) ? 'block' : 'none';
     $('saveProgressBtn').style.display = (rows.length > 0 && phase !== 'CLOSED') ? 'block' : 'none';
-    $('importUsageBtn').style.display = (rows.length > 0 && phase === 'DAY') ? 'block' : 'none';
     $('wasteDetails').style.display = phase === 'DAY' ? '' : 'none';
+    $('stockPosReminder').style.display = (phase === 'DAY' && !posImported) ? 'block' : 'none';
     renderEntry();
   }
 
@@ -519,11 +552,17 @@ details.batch > summary::-webkit-details-marker { display: none; }
   }
 
   function notDueRow(i) {
-    return '<div class="item"><div class="head"><strong>' + i.name + '</strong>' +
-      '<button class="btn small" style="margin:0" onclick="addToToday(\'' + i.sku + '\', this)">+ Count today</button></div></div>';
+    return '<div class="item notdue-row"><div class="head">' +
+      '<strong>' + i.name + '</strong>' +
+      '<button class="btn quiet small notdue-btn" onclick="addToToday(\'' + i.sku + '\', this)">+ Count today</button>' +
+      '</div></div>';
   }
 
   function renderEntry() {
+    if (rows.length === 0) {
+      $('entryList').innerHTML = '<div class="hint">No items yet — start the day above.</div>';
+      return;
+    }
     const catBySku = {}; boot.items.forEach(i => catBySku[i.sku] = i.category || 'Other');
     const order = ['F&B', 'Supplies', 'Other'];
     const activeSkus = new Set(rows.map(r => r.sku));
@@ -598,7 +637,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
     if (!confirm('Save each item\'s opening count first - unsaved values are lost. After confirming, opening counts are locked for the day. Confirm?')) return;
     $('confirmOpeningBtn').disabled = true;
     const r = await api({ action: 'confirmOpening' });
-    if (r.ok) { rows = r.rows; phase = r.phase; render(); msg($('mainMsg'), 'ok', 'Opening confirmed — day started.', $('confirmOpeningBtn')); }
+    if (r.ok) { rows = r.rows; phase = r.phase; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); toast('ok', 'Opening confirmed — day started.'); }
     else { msg($('mainMsg'), 'error', r.error, $('confirmOpeningBtn')); }
     $('confirmOpeningBtn').disabled = false;
   });
@@ -612,8 +651,23 @@ details.batch > summary::-webkit-details-marker { display: none; }
     }
     if (!confirm('After confirming, today\'s stock entries are locked. Confirm closing?')) return;
     $('confirmClosingBtn').disabled = true;
+
+    if (!posImported) {
+      const saveR = await saveAllEntries();
+      if (!saveR.ok) {
+        msg($('mainMsg'), 'error', 'Could not save your entries — staying here so nothing is lost: ' + saveR.error, $('confirmClosingBtn'));
+        $('confirmClosingBtn').disabled = false;
+        return;
+      }
+      rows = saveR.rows; phase = saveR.phase || phase; render();
+      msg($('mainMsg'), 'error', 'Progress saved. Import POS usage before closing the day — taking you to Home.', $('confirmClosingBtn'));
+      setTimeout(() => { $('main').style.display = 'none'; $('home').style.display = 'block'; renderHome(); }, 1800);
+      $('confirmClosingBtn').disabled = false;
+      return;
+    }
+
     const r = await api({ action: 'confirmClosing' });
-    if (r.ok) { rows = r.rows; phase = r.phase; render(); msg($('mainMsg'), 'ok', 'Stock day closed.', $('importUsageBtn')); }
+    if (r.ok) { rows = r.rows; phase = r.phase; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); toast('ok', 'Stock day closed.'); }
     else { msg($('mainMsg'), 'error', r.error, $('confirmClosingBtn')); }
     $('confirmClosingBtn').disabled = false;
   });
@@ -638,35 +692,45 @@ details.batch > summary::-webkit-details-marker { display: none; }
     else { msg($('mainMsg'), 'error', r.error); btn.disabled = false; }
   };
 
-  $('saveProgressBtn').addEventListener('click', async () => {
-    const btn = $('saveProgressBtn');
-    btn.disabled = true;
-    const entries = Array.from(document.querySelectorAll('#entryList .item[data-sku]')).map(card => {
+  function collectEntries() {
+    return Array.from(document.querySelectorAll('#entryList .item[data-sku]')).map(card => {
       const g = cls => { const el = card.querySelector('.' + cls); return el ? el.value : ''; };
       return phase === 'MORNING'
         ? { sku: card.dataset.sku, openingCount: g('f-openingCount'), openingRemarks: g('f-openingRemarks') }
         : { sku: card.dataset.sku, comp: g('f-comp'), physicalClosing: g('f-physicalClosing'), remarks: g('f-remarks') };
     });
-    const r = await api({ action: 'saveEntries', entries: entries });
+  }
+
+  async function saveAllEntries() {
+    return api({ action: 'saveEntries', entries: collectEntries() });
+  }
+
+  $('saveProgressBtn').addEventListener('click', async () => {
+    const btn = $('saveProgressBtn');
+    btn.disabled = true;
+    const r = await saveAllEntries();
     if (r.ok) { rows = r.rows; phase = r.phase || phase; render(); msg($('mainMsg'), 'ok', 'Saved ' + r.saved + ' item(s).', btn); }
     else { msg($('mainMsg'), 'error', r.error, btn); }
     btn.disabled = false;
   });
 
-  $('importUsageBtn').addEventListener('click', async () => {
+  $('homeImportBtn').addEventListener('click', async () => {
     if (!confirm('Before importing: 1) Sync the POS app to cloud. 2) Export today\'s Sale Transactions from the dashboard. 3) Upload the file to the POS Exports Drive folder. All done?')) return;
-    $('importUsageBtn').disabled = true;
-    const oldLabel = $('importUsageBtn').textContent;
-    $('importUsageBtn').textContent = 'Importing… please wait';
+    $('homeImportBtn').disabled = true;
+    $('homeImportBtn').textContent = 'Importing… please wait';
     const r = await api({ action: 'importUsage' });
     if (r.ok) {
       let m = 'Usage imported for ' + r.skus + ' items.';
       if (r.unmapped && r.unmapped.length) m += ' NOT in recipe map (tell Haritha): ' + r.unmapped.join(', ');
-      msg($('mainMsg'), r.unmapped && r.unmapped.length ? 'error' : 'ok', m);
-      const t = await api({ action: 'today' }); if (t.ok) { rows = t.rows; render(); }
-    } else msg($('mainMsg'), 'error', r.error, $('importUsageBtn'));
-    $('importUsageBtn').disabled = false;
-    $('importUsageBtn').textContent = oldLabel;
+      msg($('homeMsg'), r.unmapped && r.unmapped.length ? 'error' : 'ok', m);
+      const t = await api({ action: 'today' });
+      if (t.ok) { rows = t.rows; phase = t.phase || phase; posImported = !!t.posImported; }
+      render(); renderHome();
+      const c = await api({ action: 'cashToday' });
+      if (c.ok) { cash = c.cash || {}; lockbox = c.lockbox || 0; cashMeta = c.meta || {}; }
+    } else msg($('homeMsg'), 'error', r.error);
+    $('homeImportBtn').disabled = false;
+    $('homeImportBtn').textContent = posImported ? 'Re-import POS usage' : 'Import POS usage';
   });
 
   $('pPhotoBtn').addEventListener('click', () => $('pPhotoFile').click());
