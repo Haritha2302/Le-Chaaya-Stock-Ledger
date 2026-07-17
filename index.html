@@ -195,6 +195,20 @@ details.batch > summary::-webkit-details-marker { display: none; }
           </div>
         </details>
 
+        <details class="purchase" id="wasteDetails">
+          <summary>− Report wastage / breakage</summary>
+          <div class="card" style="margin-top:10px">
+            <label>Item</label><select id="wItem"></select>
+            <div class="row2">
+              <div><label>Quantity (<span class="wUnit"></span>)</label><input id="wQty" type="number" inputmode="decimal" min="0" step="any"></div>
+              <div><label>Reason</label><select id="wReason"></select></div>
+            </div>
+            <label>Remarks</label><input id="wRemarks" placeholder="What happened (optional)">
+            <button class="btn" id="wSave">Save wastage</button>
+            <div class="msg" id="wMsg"></div>
+          </div>
+        </details>
+
         <div id="entryList"></div>
         <button class="btn leaf" id="confirmOpeningBtn" style="display:none">Confirm opening counts — start selling</button>
         <button class="btn leaf" id="confirmClosingBtn" style="display:none">Confirm closing — end the stock day</button>
@@ -436,6 +450,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
     fillSelect($('pDocType'), b.docTypes.map(v => ({ v:v, t:v })));
     syncDocNo();
     fillSelect($('pPayStatus'), b.paymentStatus.map(v => ({ v:v, t:v })));
+    fillSelect($('wItem'), b.items.map(i => ({ v:i.sku, t:i.name + ' (' + i.unit + ')' })));
+    fillSelect($('wReason'), b.wastageReasons.map(v => ({ v:v, t:v })));
     const t = await api({ action:'today' });
     rows = t.ok ? t.rows : []; if (t.ok && t.phase) phase = t.phase;
     render();
@@ -452,6 +468,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
     $('confirmOpeningBtn').style.display = (rows.length > 0 && phase === 'MORNING') ? 'block' : 'none';
     $('confirmClosingBtn').style.display = (rows.length > 0 && phase === 'DAY') ? 'block' : 'none';
     $('importUsageBtn').style.display = (rows.length > 0 && phase === 'DAY') ? 'block' : 'none';
+    $('wasteDetails').style.display = phase === 'DAY' ? '' : 'none';
     renderEntry();
   }
 
@@ -488,12 +505,6 @@ details.batch > summary::-webkit-details-marker { display: none; }
                 '<div class="calcline c-ov"></div>' +
                 '<div class="wrap-ovr" style="display:none"><label>Remarks — opening variance</label><input class="f-openingRemarks" value="' + (r.openingRemarks || '') + '"></div>'
               : '<div class="facts">Opening: <b>' + fmt(r.openingCount !== '' && r.openingCount != null ? r.openingCount : r.opening) + ' ' + r.unit + '</b>' + (r.openingCount !== '' && r.openingCount != null ? ' (counted)' : ' (carried)') + ' · Purchased: <b>' + fmt(r.purchased) + '</b> · Usage (POS): <b>' + fmt(r.billed) + '</b></div>' +
-                '<div class="row2">' +
-                  '<div><label>Wastage</label><input type="number" step="any" min="0" class="f-wastage" value="' + (r.wastage ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>' +
-                  '<div><label>Reason</label><select class="f-wastageReason"><option value=""></option>' +
-                    boot.wastageReasons.map(w => '<option' + (r.wastageReason === w ? ' selected' : '') + '>' + w + '</option>').join('') +
-                  '</select></div>' +
-                '</div>' +
                 '<div class="calcline c-exp"></div>' +
                 (r.countToday
                   ? '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>'
@@ -578,6 +589,19 @@ details.batch > summary::-webkit-details-marker { display: none; }
     $('confirmClosingBtn').disabled = false;
   });
 
+  $('wSave').addEventListener('click', async () => {
+    $('wSave').disabled = true;
+    const r = await api({ action:'addWastage', sku:$('wItem').value, qty:$('wQty').value,
+      reason:$('wReason').value, remarks:$('wRemarks').value });
+    if (r.ok) {
+      $('wasteDetails').open = false;
+      ['wQty','wRemarks'].forEach(id => $(id).value = '');
+      if (r.rows) { rows = r.rows; phase = r.phase || phase; render(); }
+      msg($('mainMsg'),'ok','Wastage recorded: ' + r.qty + ' × ' + r.item + '.', $('wasteDetails'));
+    } else msg($('wMsg'),'error', r.error);
+    $('wSave').disabled = false;
+  });
+  
   $('importUsageBtn').addEventListener('click', async () => {
     if (!confirm('Before importing: 1) Sync the POS app to cloud. 2) Export today\'s Sale Transactions from the dashboard. 3) Upload the file to the POS Exports Drive folder. All done?')) return;
     $('importUsageBtn').disabled = true;
@@ -602,7 +626,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
       action:'saveEntry', sku:sku,
       openingCount:g('f-openingCount'), billed:'',
       openingRemarks:g('f-openingRemarks'),
-      wastage:g('f-wastage'), wastageReason:g('f-wastageReason'),
+      wastage:'', wastageReason:'',
       staffExcess:'', comp:g('f-comp'),
       physicalClosing:g('f-physicalClosing'), remarks:g('f-remarks')
     });
