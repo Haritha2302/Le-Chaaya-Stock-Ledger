@@ -215,6 +215,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
         </details>
 
         <div id="entryList"></div>
+        <button class="btn" id="saveProgressBtn" style="display:none">Save progress</button>
         <button class="btn leaf" id="confirmOpeningBtn" style="display:none">Confirm opening counts — start selling</button>
         <button class="btn leaf" id="confirmClosingBtn" style="display:none">Confirm closing — end the stock day</button>
       </div>
@@ -446,6 +447,12 @@ details.batch > summary::-webkit-details-marker { display: none; }
   }
   $('pItem').addEventListener('change', syncQtyUnit);
 
+  function syncWasteUnit() {
+    const it = boot && boot.items.find(i => i.sku === $('wItem').value);
+    document.querySelectorAll('.wUnit').forEach(el => el.textContent = it ? it.unit : '—');
+  }
+  $('wItem').addEventListener('change', syncWasteUnit);
+
   async function loadAll() {
     const b = await api({ action:'bootstrap' });
     if (!b.ok) { msg($('mainMsg'),'error', b.error); return; }
@@ -456,6 +463,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
     syncDocNo();
     fillSelect($('pPayStatus'), b.paymentStatus.map(v => ({ v:v, t:v })));
     fillSelect($('wItem'), b.items.map(i => ({ v:i.sku, t:i.name + ' (' + i.unit + ')' })));
+    syncWasteUnit();
     fillSelect($('wReason'), b.wastageReasons.map(v => ({ v:v, t:v })));
     const t = await api({ action:'today' });
     rows = t.ok ? t.rows : []; if (t.ok && t.phase) phase = t.phase;
@@ -471,7 +479,9 @@ details.batch > summary::-webkit-details-marker { display: none; }
     $('purchDetails').style.display = phase === 'DAY' ? '' : 'none';
     $('startDayBtn').style.display = rows.length === 0 ? 'block' : 'none';
     $('confirmOpeningBtn').style.display = (rows.length > 0 && phase === 'MORNING') ? 'block' : 'none';
-    $('confirmClosingBtn').style.display = (rows.length > 0 && phase === 'DAY') ? 'block' : 'none';
+    const pendingClosing = rows.filter(r => r.countToday && (r.physical === '' || r.physical == null)).length;
+    $('confirmClosingBtn').style.display = (rows.length > 0 && phase === 'DAY' && pendingClosing === 0) ? 'block' : 'none';
+    $('saveProgressBtn').style.display = (rows.length > 0 && phase !== 'CLOSED') ? 'block' : 'none';
     $('importUsageBtn').style.display = (rows.length > 0 && phase === 'DAY') ? 'block' : 'none';
     $('wasteDetails').style.display = phase === 'DAY' ? '' : 'none';
     renderEntry();
@@ -484,10 +494,10 @@ details.batch > summary::-webkit-details-marker { display: none; }
       return '<div class="item"><div class="head"><strong>' + r.item + '</strong>' +
         '<span class="badge done">' + fmt(r.physical) + ' ' + r.unit + '</span></div></div>';
     }
-    const entered = phase === 'MORNING' ? (r.openingCount !== '' && r.openingCount != null) : (r.countedBy !== '');
-    const badgeText = !r.countToday ? (entered ? 'Entered' : 'Not due') : (entered ? 'Entered' : 'Pending');
-    return '<div class="item" data-sku="' + r.sku + '" data-open="' + (r.opening || 0) + '" data-purch="' + (r.purchased || 0) + '" data-usage="' + (r.billed || 0) + '" data-wast="' + (r.wastage || 0) + '" data-oc="' + (r.openingCount !== '' && r.openingCount != null ? r.openingCount : '') + '">' +
-      '<div class="head" onclick="toggle(this)"><strong>' + r.item + '</strong>' +
+    const entered = phase === 'MORNING' ? (r.openingCount !== '' && r.openingCount != null) : (r.physical !== '' && r.physical != null);
+    const badgeText = phase === 'DAY' && !r.countToday ? (entered ? 'Entered' : 'Not due') : (entered ? 'Entered' : 'Pending');
+    return '<div class="item open" data-sku="' + r.sku + '" data-open="' + (r.opening || 0) + '" data-purch="' + (r.purchased || 0) + '" data-usage="' + (r.billed || 0) + '" data-wast="' + (r.wastage || 0) + '" data-oc="' + (r.openingCount !== '' && r.openingCount != null ? r.openingCount : '') + '">' +
+      '<div class="head"><strong>' + r.item + '</strong>' +
       '<span class="badge ' + (entered ? 'done' : '') + '">' + badgeText + '</span></div>' +
       '<div class="body">' +
       (phase === 'MORNING'
@@ -495,7 +505,7 @@ details.batch > summary::-webkit-details-marker { display: none; }
           '<div><label>Opening count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-openingCount" value="' + (r.openingCount ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>' +
           '<div class="calcline c-ov"></div>' +
           '<div class="wrap-ovr" style="display:none"><label>Remarks — opening variance</label><input class="f-openingRemarks" value="' + (r.openingRemarks || '') + '"></div>'
-        : '<div class="facts">Opening: <b>' + fmt(r.openingCount !== '' && r.openingCount != null ? r.openingCount : r.opening) + ' ' + r.unit + '</b>' + (r.openingCount !== '' && r.openingCount != null ? ' (counted)' : ' (carried)') + ' · Purchased: <b>' + fmt(r.purchased) + '</b> · Usage (POS): <b>' + fmt(r.billed) + '</b></div>' +
+        : '<div class="facts">Opening: <b>' + fmt(r.openingCount !== '' && r.openingCount != null ? r.openingCount : r.opening) + ' ' + r.unit + '</b>' + (r.openingCount !== '' && r.openingCount != null ? ' (counted)' : ' (carried)') + ' · Purchased: <b>' + fmt(r.purchased) + '</b> · Usage (POS): <b>' + fmt(r.billed) + '</b>' + (Number(r.wastage) ? ' · Wastage: <b>' + r.wastage + '</b>' : '') + (Number(r.comp) ? ' · Comp/Sampling: <b>' + r.comp + '</b>' : '') + '</div>' +
           '<div class="calcline c-exp"></div>' +
           (r.countToday
             ? '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>'
@@ -505,22 +515,27 @@ details.batch > summary::-webkit-details-marker { display: none; }
           '<div class="wrap-cvr" style="display:none"><label>Remarks — closing variance</label><input class="f-remarks" value="' + (r.remarks || '') + '"></div>' +
           '<a class="morelink" onclick="this.closest(\'.item\').classList.toggle(\'showmore\')">+ comp/sampling</a>' +
           '<div class="more-fields"><div><label>Comp/Sampling</label><input type="number" step="any" min="0" class="f-comp" value="' + (r.comp ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div></div>') +
-      (phase === 'CLOSED' ? '<div class="hint">Day closed — locked.</div>'
-        : '<button class="btn small" onclick="saveEntry(\'' + r.sku + '\', this)">Save ' + r.item + '</button>') +
       '</div></div>';
   }
 
+  function notDueRow(i) {
+    return '<div class="item"><div class="head"><strong>' + i.name + '</strong>' +
+      '<button class="btn small" style="margin:0" onclick="addToToday(\'' + i.sku + '\', this)">+ Count today</button></div></div>';
+  }
+
   function renderEntry() {
-    const openSects = new Set(Array.from(document.querySelectorAll('#entryList details.sect[open]')).map(d => d.dataset.cat));
-    const openItems = new Set(Array.from(document.querySelectorAll('#entryList .item.open')).map(d => d.dataset.sku));
     const catBySku = {}; boot.items.forEach(i => catBySku[i.sku] = i.category || 'Other');
     const order = ['F&B', 'Supplies', 'Other'];
+    const activeSkus = new Set(rows.map(r => r.sku));
+    const notDueAll = phase === 'CLOSED' ? [] : boot.items.filter(i => !i.countToday && !activeSkus.has(i.sku));
+
     $('entryList').innerHTML = order.map(cat => {
-      const group = rows.filter(r => (catBySku[r.sku] || 'Other') === cat);
-      if (!group.length) return '';
-      const due = phase === 'CLOSED' ? group : group.filter(r => r.countToday);
-      const notDue = phase === 'CLOSED' ? [] : group.filter(r => !r.countToday);
-      const pending = due.filter(r => phase === 'MORNING' ? !(r.openingCount !== '' && r.openingCount != null) : r.countedBy === '').length;
+      const due = rows.filter(r => (catBySku[r.sku] || 'Other') === cat);
+      const notDue = notDueAll.filter(i => (i.category || 'Other') === cat);
+      if (!due.length && !notDue.length) return '';
+      const pending = due.filter(r => phase === 'MORNING'
+        ? !(r.openingCount !== '' && r.openingCount != null)
+        : (r.countToday && (r.physical === '' || r.physical == null))).length;
       const countLabel = phase === 'CLOSED' ? 'final counts'
         : phase === 'MORNING' ? (due.length - pending) + ' counted (optional)'
         : (pending ? pending + ' pending' : 'all entered ✓');
@@ -528,21 +543,16 @@ details.batch > summary::-webkit-details-marker { display: none; }
         ? '<details class="sect notdue" data-cat="' + cat + '-notdue">' +
             '<summary><span class="section-h">Not due today</span>' +
             '<span class="sect-count">' + notDue.length + '</span></summary>' +
-            notDue.map(itemCard).join('') +
+            notDue.map(notDueRow).join('') +
           '</details>'
         : '';
-      return '<details class="sect" data-cat="' + cat + '">' +
+      return '<details class="sect" data-cat="' + cat + '" open>' +
         '<summary class="section-h">' + cat +
         '<span class="sect-count">' + countLabel + '</span></summary>' +
         due.map(itemCard).join('') + notDueBlock + '</details>';
     }).join('') || '<div class="hint">No items yet — start the day above.</div>';
-    document.querySelectorAll('#entryList details.sect').forEach(d => { if (openSects.has(d.dataset.cat)) d.open = true; });
-    document.querySelectorAll('#entryList .item').forEach(d => {
-      if (d.dataset.sku !== lastSavedSku && openItems.has(d.dataset.sku)) d.classList.add('open');
-      if (phase === 'CLOSED') d.querySelectorAll('input, select').forEach(el => el.disabled = true);
-      recalc(d);
-    });
-    lastSavedSku = null;
+
+    document.querySelectorAll('#entryList .item[data-sku]').forEach(recalc);
   }
 
   window.recalc = card => {
@@ -577,8 +587,10 @@ details.batch > summary::-webkit-details-marker { display: none; }
   $('startDayBtn').addEventListener('click', async () => {
     $('startDayBtn').disabled = true;
     const r = await api({ action:'startDay' });
-    if (r.ok) { rows = r.rows; phase = r.phase || phase; render(); msg($('mainMsg'),'ok','Day started — ' + r.added + ' items ready.', $('startDayBtn')); }
-    else msg($('mainMsg'),'error', r.error, $('startDayBtn'));
+    if (r.ok) {
+      rows = r.rows; phase = r.phase || phase; render();
+      msg($('mainMsg'),'ok', r.added > 0 ? ('Day started — ' + r.added + ' items ready.') : 'Already set up for today.', $('startDayBtn'));
+    } else msg($('mainMsg'),'error', r.error, $('startDayBtn'));
     $('startDayBtn').disabled = false;
   });
 
@@ -618,7 +630,29 @@ details.batch > summary::-webkit-details-marker { display: none; }
     } else msg($('wMsg'),'error', r.error);
     $('wSave').disabled = false;
   });
-  
+
+  window.addToToday = async (sku, btn) => {
+    btn.disabled = true;
+    const r = await api({ action: 'addToToday', sku: sku });
+    if (r.ok) { rows = r.rows; phase = r.phase || phase; render(); }
+    else { msg($('mainMsg'), 'error', r.error); btn.disabled = false; }
+  };
+
+  $('saveProgressBtn').addEventListener('click', async () => {
+    const btn = $('saveProgressBtn');
+    btn.disabled = true;
+    const entries = Array.from(document.querySelectorAll('#entryList .item[data-sku]')).map(card => {
+      const g = cls => { const el = card.querySelector('.' + cls); return el ? el.value : ''; };
+      return phase === 'MORNING'
+        ? { sku: card.dataset.sku, openingCount: g('f-openingCount'), openingRemarks: g('f-openingRemarks') }
+        : { sku: card.dataset.sku, comp: g('f-comp'), physicalClosing: g('f-physicalClosing'), remarks: g('f-remarks') };
+    });
+    const r = await api({ action: 'saveEntries', entries: entries });
+    if (r.ok) { rows = r.rows; phase = r.phase || phase; render(); msg($('mainMsg'), 'ok', 'Saved ' + r.saved + ' item(s).', btn); }
+    else { msg($('mainMsg'), 'error', r.error, btn); }
+    btn.disabled = false;
+  });
+
   $('importUsageBtn').addEventListener('click', async () => {
     if (!confirm('Before importing: 1) Sync the POS app to cloud. 2) Export today\'s Sale Transactions from the dashboard. 3) Upload the file to the POS Exports Drive folder. All done?')) return;
     $('importUsageBtn').disabled = true;
@@ -634,22 +668,6 @@ details.batch > summary::-webkit-details-marker { display: none; }
     $('importUsageBtn').disabled = false;
     $('importUsageBtn').textContent = oldLabel;
   });
-
-  window.saveEntry = async (sku, btn) => {
-    const card = btn.closest('.item');
-    const g = cls => { const el = card.querySelector('.' + cls); return el ? el.value : ''; };
-    btn.disabled = true;
-    const r = await api({
-      action:'saveEntry', sku:sku,
-      openingCount:g('f-openingCount'), billed:'',
-      openingRemarks:g('f-openingRemarks'),
-      wastage:'', wastageReason:'',
-      staffExcess:'', comp:g('f-comp'),
-      physicalClosing:g('f-physicalClosing'), remarks:g('f-remarks')
-    });
-    if (r.ok) { lastSavedSku = sku; rows = r.rows; phase = r.phase || phase; render(); msg($('mainMsg'),'ok','Saved.'); }
-    else { msg($('mainMsg'),'error', r.error); btn.disabled = false; }
-  };
 
   $('pPhotoBtn').addEventListener('click', () => $('pPhotoFile').click());
   $('pPhotoFile').addEventListener('change', async e => {
