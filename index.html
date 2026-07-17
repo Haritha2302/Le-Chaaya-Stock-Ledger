@@ -103,6 +103,11 @@ details.sect > summary::-webkit-details-marker { display: none; }
 .section-h { font-size: 1.05rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--tea); font-weight: 600; }
 .sect-count { font-size: 0.78rem; letter-spacing: 0.05em; color: var(--gold-deep); border: 1px solid var(--gold); border-radius: 20px; padding: 3px 10px; }
 
+details.sect.notdue { margin: 10px 0 4px; }
+details.sect.notdue > summary { border-bottom: 1px dashed var(--line); padding: 8px 4px; margin: 6px 0 8px; }
+details.sect.notdue > summary .section-h { font-size: 0.78rem; letter-spacing: 0.06em; text-transform: none; font-weight: 500; color: #8b7d66; }
+details.sect.notdue > summary .sect-count { color: #8b7d66; border-color: var(--line); }
+
 details.batch > summary { list-style: none; cursor: pointer; font-size: 0.85rem; color: var(--gold-deep); text-decoration: underline; padding: 4px 0; }
 details.batch > summary::-webkit-details-marker { display: none; }
 
@@ -474,6 +479,37 @@ details.batch > summary::-webkit-details-marker { display: none; }
 
   function fmt(v) { return (v === '' || v == null) ? '—' : v; }
 
+  function itemCard(r) {
+    if (phase === 'CLOSED') {
+      return '<div class="item"><div class="head"><strong>' + r.item + '</strong>' +
+        '<span class="badge done">' + fmt(r.physical) + ' ' + r.unit + '</span></div></div>';
+    }
+    const entered = phase === 'MORNING' ? (r.openingCount !== '' && r.openingCount != null) : (r.countedBy !== '');
+    const badgeText = !r.countToday ? (entered ? 'Entered' : 'Not due') : (entered ? 'Entered' : 'Pending');
+    return '<div class="item" data-sku="' + r.sku + '" data-open="' + (r.opening || 0) + '" data-purch="' + (r.purchased || 0) + '" data-usage="' + (r.billed || 0) + '" data-wast="' + (r.wastage || 0) + '" data-oc="' + (r.openingCount !== '' && r.openingCount != null ? r.openingCount : '') + '">' +
+      '<div class="head" onclick="toggle(this)"><strong>' + r.item + '</strong>' +
+      '<span class="badge ' + (entered ? 'done' : '') + '">' + badgeText + '</span></div>' +
+      '<div class="body">' +
+      (phase === 'MORNING'
+        ? '<div class="facts">Yesterday\'s closing: <b>' + fmt(r.opening) + ' ' + r.unit + '</b></div>' +
+          '<div><label>Opening count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-openingCount" value="' + (r.openingCount ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>' +
+          '<div class="calcline c-ov"></div>' +
+          '<div class="wrap-ovr" style="display:none"><label>Remarks — opening variance</label><input class="f-openingRemarks" value="' + (r.openingRemarks || '') + '"></div>'
+        : '<div class="facts">Opening: <b>' + fmt(r.openingCount !== '' && r.openingCount != null ? r.openingCount : r.opening) + ' ' + r.unit + '</b>' + (r.openingCount !== '' && r.openingCount != null ? ' (counted)' : ' (carried)') + ' · Purchased: <b>' + fmt(r.purchased) + '</b> · Usage (POS): <b>' + fmt(r.billed) + '</b></div>' +
+          '<div class="calcline c-exp"></div>' +
+          (r.countToday
+            ? '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>'
+            : '<div class="hint">No count due today — carries forward automatically. Count anyway if something looks off.</div>' +
+              '<div><label>Closing count — optional (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>') +
+          '<div class="calcline c-cv"></div>' +
+          '<div class="wrap-cvr" style="display:none"><label>Remarks — closing variance</label><input class="f-remarks" value="' + (r.remarks || '') + '"></div>' +
+          '<a class="morelink" onclick="this.closest(\'.item\').classList.toggle(\'showmore\')">+ comp/sampling</a>' +
+          '<div class="more-fields"><div><label>Comp/Sampling</label><input type="number" step="any" min="0" class="f-comp" value="' + (r.comp ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div></div>') +
+      (phase === 'CLOSED' ? '<div class="hint">Day closed — locked.</div>'
+        : '<button class="btn small" onclick="saveEntry(\'' + r.sku + '\', this)">Save ' + r.item + '</button>') +
+      '</div></div>';
+  }
+
   function renderEntry() {
     const openSects = new Set(Array.from(document.querySelectorAll('#entryList details.sect[open]')).map(d => d.dataset.cat));
     const openItems = new Set(Array.from(document.querySelectorAll('#entryList .item.open')).map(d => d.dataset.sku));
@@ -481,44 +517,24 @@ details.batch > summary::-webkit-details-marker { display: none; }
     const order = ['F&B', 'Supplies', 'Other'];
     $('entryList').innerHTML = order.map(cat => {
       const group = rows.filter(r => (catBySku[r.sku] || 'Other') === cat);
-      group.sort((a, b) => (b.countToday ? 1 : 0) - (a.countToday ? 1 : 0));
       if (!group.length) return '';
-      const pending = group.filter(r => phase === 'MORNING' ? !(r.openingCount !== '' && r.openingCount != null) : r.countToday && r.countedBy === '').length;
+      const due = phase === 'CLOSED' ? group : group.filter(r => r.countToday);
+      const notDue = phase === 'CLOSED' ? [] : group.filter(r => !r.countToday);
+      const pending = due.filter(r => phase === 'MORNING' ? !(r.openingCount !== '' && r.openingCount != null) : r.countedBy === '').length;
       const countLabel = phase === 'CLOSED' ? 'final counts'
-        : phase === 'MORNING' ? (group.length - pending) + ' counted (optional)'
+        : phase === 'MORNING' ? (due.length - pending) + ' counted (optional)'
         : (pending ? pending + ' pending' : 'all entered ✓');
+      const notDueBlock = notDue.length
+        ? '<details class="sect notdue" data-cat="' + cat + '-notdue">' +
+            '<summary><span class="section-h">Not due today</span>' +
+            '<span class="sect-count">' + notDue.length + '</span></summary>' +
+            notDue.map(itemCard).join('') +
+          '</details>'
+        : '';
       return '<details class="sect" data-cat="' + cat + '">' +
         '<summary class="section-h">' + cat +
         '<span class="sect-count">' + countLabel + '</span></summary>' +
-        group.map(r => {
-          if (phase === 'CLOSED') {
-            return '<div class="item"><div class="head"><strong>' + r.item + '</strong>' +
-              '<span class="badge done">' + fmt(r.physical) + ' ' + r.unit + '</span></div></div>';
-          }
-          const done = phase === 'MORNING' ? (r.openingCount !== '' && r.openingCount != null) : (r.countedBy !== '' || !r.countToday);
-          return '<div class="item" data-sku="' + r.sku + '" data-open="' + (r.opening || 0) + '" data-purch="' + (r.purchased || 0) + '" data-usage="' + (r.billed || 0) + '" data-wast="' + (r.wastage || 0) + '" data-oc="' + (r.openingCount !== '' && r.openingCount != null ? r.openingCount : '') + '">' +
-            '<div class="head" onclick="toggle(this)"><strong>' + r.item + '</strong>' +
-            '<span class="badge ' + (done ? 'done' : '') + '">' + (done ? 'Entered' : 'Pending') + '</span></div>' +
-            '<div class="body">' +
-            (phase === 'MORNING'
-              ? '<div class="facts">Yesterday\'s closing: <b>' + fmt(r.opening) + ' ' + r.unit + '</b></div>' +
-                '<div><label>Opening count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-openingCount" value="' + (r.openingCount ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>' +
-                '<div class="calcline c-ov"></div>' +
-                '<div class="wrap-ovr" style="display:none"><label>Remarks — opening variance</label><input class="f-openingRemarks" value="' + (r.openingRemarks || '') + '"></div>'
-              : '<div class="facts">Opening: <b>' + fmt(r.openingCount !== '' && r.openingCount != null ? r.openingCount : r.opening) + ' ' + r.unit + '</b>' + (r.openingCount !== '' && r.openingCount != null ? ' (counted)' : ' (carried)') + ' · Purchased: <b>' + fmt(r.purchased) + '</b> · Usage (POS): <b>' + fmt(r.billed) + '</b></div>' +
-                '<div class="calcline c-exp"></div>' +
-                (r.countToday
-                  ? '<div><label>Closing count (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>'
-                  : '<div class="hint">No count due today — carries forward automatically. Count anyway if something looks off.</div>' +
-                    '<div><label>Closing count — optional (' + r.unit + ')</label><input type="number" step="any" min="0" class="f-physicalClosing" value="' + (r.physical ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div>') +
-                '<div class="calcline c-cv"></div>' +
-                '<div class="wrap-cvr" style="display:none"><label>Remarks — closing variance</label><input class="f-remarks" value="' + (r.remarks || '') + '"></div>' +
-                '<a class="morelink" onclick="this.closest(\'.item\').classList.toggle(\'showmore\')">+ comp/sampling</a>' +
-                '<div class="more-fields"><div><label>Comp/Sampling</label><input type="number" step="any" min="0" class="f-comp" value="' + (r.comp ?? '') + '" oninput="recalc(this.closest(\'.item\'))"></div></div>') +
-            (phase === 'CLOSED' ? '<div class="hint">Day closed — locked.</div>'
-              : '<button class="btn small" onclick="saveEntry(\'' + r.sku + '\', this)">Save ' + r.item + '</button>') +
-            '</div></div>';
-        }).join('') + '</details>';
+        due.map(itemCard).join('') + notDueBlock + '</details>';
     }).join('') || '<div class="hint">No items yet — start the day above.</div>';
     document.querySelectorAll('#entryList details.sect').forEach(d => { if (openSects.has(d.dataset.cat)) d.open = true; });
     document.querySelectorAll('#entryList .item').forEach(d => {
