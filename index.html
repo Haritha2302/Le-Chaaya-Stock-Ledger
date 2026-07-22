@@ -637,11 +637,31 @@ details.batch > summary::-webkit-details-marker { display: none; }
 
   $('fetchPosBtn').addEventListener('click', async () => {
     if (!confirm('Has the POS app been synced to cloud today? The report only contains synced sales.')) return;
-    $('fetchPosBtn').disabled = true;
+    const btn = $('fetchPosBtn');
+    btn.disabled = true;
+    let before = 0;
+    try { const s0 = await api({ action: 'posFileStatus' }); before = (s0.ok && s0.updated) || 0; } catch (e) {}
     const r = await api({ action: 'fetchPos' });
-    if (r.ok) msg($('homeMsg'), 'ok', 'Fetching from POS — wait about 2 minutes, then tap Import.', $('fetchPosBtn'));
-    else msg($('homeMsg'), 'error', r.error, $('fetchPosBtn'));
-    $('fetchPosBtn').disabled = false;
+    if (!r.ok) { msg($('homeMsg'), 'error', r.error, btn); btn.disabled = false; return; }
+    msg($('homeMsg'), 'ok', 'Fetching from the POS dashboard…', btn);
+    let waited = 0;
+    const poll = setInterval(async () => {
+      waited += 10;
+      btn.textContent = '1 · Fetching… ' + waited + 's';
+      let s; try { s = await api({ action: 'posFileStatus' }); } catch (e) { return; }
+      if (s && s.ok && s.updated && s.updated > before) {
+        clearInterval(poll);
+        btn.textContent = '1 · Report fetched ✓';
+        btn.disabled = false;
+        msg($('homeMsg'), 'ok', 'Report fetched. Now tap 2 · Import POS usage.');
+        toast('ok', 'Report ready — tap 2 · Import.');
+      } else if (waited >= 180) {
+        clearInterval(poll);
+        btn.textContent = '1 · Fetch today\'s report from POS';
+        btn.disabled = false;
+        msg($('homeMsg'), 'error', 'No new report after 3 minutes — tell Haritha.', btn);
+      }
+    }, 10000);
   });
 
   $('confirmOpeningBtn').addEventListener('click', async () => {
