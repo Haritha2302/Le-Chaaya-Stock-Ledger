@@ -502,10 +502,11 @@ details.batch > summary::-webkit-details-marker { display: none; }
 
   function renderHome() {
     const showImport = phase === 'DAY';
-    $('homeImportBtn').style.display = showImport ? 'block' : 'none';
+    $('fetchPosBtn').style.display = showImport ? 'block' : 'none';
+    $('importUsageBtn').style.display = showImport ? 'block' : 'none';
     $('homeImportHint').style.display = (showImport && !posImported) ? 'block' : 'none';
-    $('homeImportHint').textContent = 'Import POS usage to close the day.';
-    $('homeImportBtn').textContent = posImported ? 'Re-import POS usage' : 'Import POS usage';
+    $('homeImportHint').textContent = 'Sync the POS app → tap 1 → wait ~2 min → tap 2. Needed before closing the day.';
+    $('importUsageBtn').textContent = posImported ? '2 · Re-import POS usage' : '2 · Import POS usage';
   }
 
   // ── RENDER ──
@@ -638,8 +639,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
     if (!confirm('Has the POS app been synced to cloud today? The report only contains synced sales.')) return;
     $('fetchPosBtn').disabled = true;
     const r = await api({ action: 'fetchPos' });
-    if (r.ok) msg($('mainMsg'), 'ok', 'Fetching from POS — wait about 2 minutes, then tap Import.', $('fetchPosBtn'));
-    else msg($('mainMsg'), 'error', r.error, $('fetchPosBtn'));
+    if (r.ok) msg($('homeMsg'), 'ok', 'Fetching from POS — wait about 2 minutes, then tap Import.', $('fetchPosBtn'));
+    else msg($('homeMsg'), 'error', r.error, $('fetchPosBtn'));
     $('fetchPosBtn').disabled = false;
   });
 
@@ -724,10 +725,10 @@ details.batch > summary::-webkit-details-marker { display: none; }
     btn.disabled = false;
   });
 
-  $('homeImportBtn').addEventListener('click', async () => {
-    if (!confirm('Before importing: 1) Sync the POS app to cloud. 2) Export today\'s Sale Transactions from the dashboard. 3) Upload the file to the POS Exports Drive folder. All done?')) return;
-    $('homeImportBtn').disabled = true;
-    $('homeImportBtn').textContent = 'Importing… please wait';
+  $('importUsageBtn').addEventListener('click', async () => {
+    if (!confirm('Have you tapped "1 · Fetch today\'s report from POS" and waited for it to finish?')) return;
+    $('importUsageBtn').disabled = true;
+    $('importUsageBtn').textContent = 'Importing… please wait';
     const r = await api({ action: 'importUsage' });
     if (r.ok) {
       let m = 'Usage imported for ' + r.skus + ' items.';
@@ -739,8 +740,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
       const c = await api({ action: 'cashToday' });
       if (c.ok) { cash = c.cash || {}; lockbox = c.lockbox || 0; cashMeta = c.meta || {}; }
     } else msg($('homeMsg'), 'error', r.error);
-    $('homeImportBtn').disabled = false;
-    $('homeImportBtn').textContent = posImported ? 'Re-import POS usage' : 'Import POS usage';
+    $('importUsageBtn').disabled = false;
+    $('importUsageBtn').textContent = posImported ? '2 · Re-import POS usage' : '2 · Import POS usage';
   });
 
   $('pPhotoBtn').addEventListener('click', () => $('pPhotoFile').click());
