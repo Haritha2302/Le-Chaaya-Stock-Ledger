@@ -148,7 +148,8 @@ details.batch > summary::-webkit-details-marker { display: none; }
       <div class="topbar"><span id="helloHome"></span><a href="#" onclick="location.reload();return false;">Sign out</a></div>
       <button class="btn" id="goStock">Stock ledger</button>
       <button class="btn" id="goCash">Cash count</button>
-      <button class="btn quiet" id="homeImportBtn" style="display:none">Import POS usage</button>
+      <button class="btn quiet" id="fetchPosBtn" style="display:none">1 · Fetch today's report from POS</button>
+      <button class="btn quiet" id="importUsageBtn" style="display:none">2 · Import POS usage</button>
       <div class="hint" id="homeImportHint" style="display:none;text-align:center;margin-top:8px"></div>
       <div class="msg" id="homeMsg"></div>
     </div>
@@ -631,6 +632,15 @@ details.batch > summary::-webkit-details-marker { display: none; }
       msg($('mainMsg'),'ok', r.added > 0 ? ('Day started — ' + r.added + ' items ready.') : 'Already set up for today.', $('startDayBtn'));
     } else msg($('mainMsg'),'error', r.error, $('startDayBtn'));
     $('startDayBtn').disabled = false;
+  });
+
+  $('fetchPosBtn').addEventListener('click', async () => {
+    if (!confirm('Has the POS app been synced to cloud today? The report only contains synced sales.')) return;
+    $('fetchPosBtn').disabled = true;
+    const r = await api({ action: 'fetchPos' });
+    if (r.ok) msg($('mainMsg'), 'ok', 'Fetching from POS — wait about 2 minutes, then tap Import.', $('fetchPosBtn'));
+    else msg($('mainMsg'), 'error', r.error, $('fetchPosBtn'));
+    $('fetchPosBtn').disabled = false;
   });
 
   $('confirmOpeningBtn').addEventListener('click', async () => {
