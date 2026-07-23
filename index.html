@@ -635,31 +635,39 @@ details.batch > summary::-webkit-details-marker { display: none; }
     $('startDayBtn').disabled = false;
   });
 
+  let posPoll = null;
   $('fetchPosBtn').addEventListener('click', async () => {
     if (!confirm('Has the POS app been synced to cloud today? The report only contains synced sales.')) return;
     const btn = $('fetchPosBtn');
+    if (posPoll) { clearInterval(posPoll); posPoll = null; }   // never run two pollers
     btn.disabled = true;
-    let before = 0;
-    try { const s0 = await api({ action: 'posFileStatus' }); before = (s0.ok && s0.updated) || 0; } catch (e) {}
+    let beforeName = '', beforeTime = 0;
+    try {
+      const s0 = await api({ action: 'posFileStatus' });
+      if (s0.ok) { beforeName = s0.file || ''; beforeTime = s0.updated || 0; }
+    } catch (e) {}
     const r = await api({ action: 'fetchPos' });
     if (!r.ok) { msg($('homeMsg'), 'error', r.error, btn); btn.disabled = false; return; }
     msg($('homeMsg'), 'ok', 'Fetching from the POS dashboard…', btn);
-    let waited = 0;
-    const poll = setInterval(async () => {
-      waited += 10;
+
+    const started = Date.now();
+    posPoll = setInterval(async () => {
+      const waited = Math.round((Date.now() - started) / 1000);   // real elapsed time
       btn.textContent = '1 · Fetching… ' + waited + 's';
       let s; try { s = await api({ action: 'posFileStatus' }); } catch (e) { return; }
-      if (s && s.ok && s.updated && s.updated > before) {
-        clearInterval(poll);
+      const changed = s && s.ok && s.file &&
+        (s.file !== beforeName || (s.updated || 0) > beforeTime);
+      if (changed) {
+        clearInterval(posPoll); posPoll = null;
         btn.textContent = '1 · Report fetched ✓';
         btn.disabled = false;
         msg($('homeMsg'), 'ok', 'Report fetched. Now tap 2 · Import POS usage.');
         toast('ok', 'Report ready — tap 2 · Import.');
-      } else if (waited >= 180) {
-        clearInterval(poll);
+      } else if (waited >= 240) {
+        clearInterval(posPoll); posPoll = null;
         btn.textContent = '1 · Fetch today\'s report from POS';
         btn.disabled = false;
-        msg($('homeMsg'), 'error', 'No new report after 3 minutes — tell Haritha.', btn);
+        msg($('homeMsg'), 'error', 'No new report after 4 minutes — check with Haritha, or tap 2 · Import to try anyway.', btn);
       }
     }, 10000);
   });
